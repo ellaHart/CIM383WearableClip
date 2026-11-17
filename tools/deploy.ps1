@@ -10,7 +10,7 @@ if (-not (Test-Path (Join-Path $target "boot_out.txt"))) {
     exit 1
 }
 
-robocopy $source $target /E /XF .gitkeep /NJH /NJS /NDL /NP
+robocopy $source $target /E /XF .gitkeep /XD __pycache__ /NJH /NJS /NDL /NP
 if ($LASTEXITCODE -ge 8) {
     Write-Error "Copy failed (robocopy exit code $LASTEXITCODE). If CIRCUITPY is read-only, reset without holding IO14."
     exit 1
