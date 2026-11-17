@@ -1,0 +1,4 @@
+Adafruit CircuitPython 10.3.2 on 2026-11-11; LILYGO T-DISPLAY S3 v1.2 with ESP32S3
+Board ID:lilygo_tdisplay_s3
+UID:893C775AB044
+MAC:98:C3:77:A5:0B:44

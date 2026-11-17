@@ -1,0 +1,6 @@
+# Copy this to D:\settings.toml (on the board) and fill in real values.
+# Never commit the real settings.toml - it is in .gitignore.
+
+# Phone hotspot. CircuitPython connects to this automatically at startup.
+CIRCUITPY_WIFI_SSID = "your-hotspot-name"
+CIRCUITPY_WIFI_PASSWORD = "your-hotspot-password"
