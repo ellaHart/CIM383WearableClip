@@ -1,0 +1,19 @@
+# Secrets: Wi-Fi password, API keys. Commit settings.example.toml instead.
+settings.toml
+.env
+.env.*
+!.env.example
+
+# Python / Node
+__pycache__/
+*.pyc
+node_modules/
+
+# OS junk (Windows + files macOS/Linux leave on CIRCUITPY)
+Thumbs.db
+desktop.ini
+.DS_Store
+.fseventsd/
+.Trashes
+.Trash-*
+.metadata_never_index
