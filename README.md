@@ -33,24 +33,18 @@ Pass `-Drive E:` if CIRCUITPY shows up as a different letter. Don't edit files d
 
 ## Website controller (`web/`)
 
-A phone website that picks the clip's mood remotely, through a small HTTPS API on Cloudflare. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+A phone website that picks the clip's mood remotely, through Vercel Functions and an Upstash Redis database. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-**Run it locally** (needs Node.js):
+**Run it locally** (needs Node.js; no accounts; uses an in-memory store):
 ```powershell
 cd web
 npm install
-copy .dev.vars.example .dev.vars   # then put two long random values in it
-npm run dev                        # http://127.0.0.1:8787
+copy .env.example .env.local   # then put two long random values in it
+npm run dev                    # http://127.0.0.1:3000
 ```
 
-**Deploy** (free Cloudflare account):
-```powershell
-cd web
-npx wrangler login
-npx wrangler secret put CONTROL_TOKEN   # the code you'll type on your phone
-npx wrangler secret put DEVICE_TOKEN    # goes in the clip's settings.toml
-npm run deploy                          # prints https://moodclip.<subdomain>.workers.dev
-```
+**Deploy:** import this GitHub repo in Vercel with **Root Directory = `web`**, add Upstash Redis from the Vercel Marketplace, and set `CONTROL_TOKEN` / `DEVICE_TOKEN` as environment variables. Every push then deploys automatically. Step-by-step: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#deploying-on-vercel).
+
 Then add `MOODCLIP_API_URL` and `MOODCLIP_DEVICE_TOKEN` to `D:\settings.toml` (see `settings.example.toml`). The clip prints `Cloud:` lines on the serial console.
 
 **Boot modes** (`device/boot.py`, applies after a hard reset):

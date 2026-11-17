@@ -55,7 +55,7 @@ def save(slot, value):
 # To add one (drawings, photos, a game...), write a class like these and add it to SCREENS.
 
 class MoodScreen:
-    id = "moods"  # mode id shared with the website (web/src/worker.js MODES)
+    id = "moods"  # mode id shared with the website (web/lib/core.js MODES)
     name = "Moods"
 
     def __init__(self):

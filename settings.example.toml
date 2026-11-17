@@ -9,5 +9,5 @@ MOODCLIP_WIFI_SSID = "your-hotspot-name"
 MOODCLIP_WIFI_PASSWORD = "your-hotspot-password"
 
 # Website remote control (see docs/ARCHITECTURE.md). Leave out to keep the clip offline-only.
-MOODCLIP_API_URL = "https://moodclip.your-subdomain.workers.dev"
-MOODCLIP_DEVICE_TOKEN = "same value as the Worker's DEVICE_TOKEN secret"
+MOODCLIP_API_URL = "https://your-project.vercel.app"
+MOODCLIP_DEVICE_TOKEN = "same value as DEVICE_TOKEN in the Vercel project's environment variables"

@@ -1,7 +1,7 @@
-# Cloud sync: the clip checks in with the Mood Clip API (web/src/worker.js) over HTTPS.
+# Cloud sync: the clip checks in with the Mood Clip API (web/api on Vercel) over HTTPS.
 #
 # settings.toml on the board (never committed):
-#   MOODCLIP_API_URL = "https://moodclip.<your-subdomain>.workers.dev"
+#   MOODCLIP_API_URL = "https://<your-project>.vercel.app"
 #   MOODCLIP_DEVICE_TOKEN = "..."
 # Every SYNC_INTERVAL seconds it POSTs what the clip is showing and gets back the latest
 # command from the website. Each command has a version number; the clip applies a version
