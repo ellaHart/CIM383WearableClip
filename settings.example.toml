@@ -1,6 +1,9 @@
-# Copy this to D:\settings.toml (on the board) and fill in real values.
-# Never commit the real settings.toml - it is in .gitignore.
+# Template for settings.toml ON THE BOARD (D:\settings.toml). Edit it there directly.
+# Never put real values in this file, and never commit settings.toml (it is in .gitignore).
+# tools/deploy.ps1 never copies or overwrites the board's settings.toml.
 
-# Phone hotspot. CircuitPython connects to this automatically at startup.
-CIRCUITPY_WIFI_SSID = "your-hotspot-name"
-CIRCUITPY_WIFI_PASSWORD = "your-hotspot-password"
+# Phone hotspot (must be 2.4 GHz; on iPhone turn on "Maximize Compatibility").
+# These are deliberately NOT the CIRCUITPY_WIFI_* names: those make CircuitPython
+# connect on its own at boot and start its web file editor. wifi_link.py connects instead.
+MOODCLIP_WIFI_SSID = "your-hotspot-name"
+MOODCLIP_WIFI_PASSWORD = "your-hotspot-password"

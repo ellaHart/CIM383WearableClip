@@ -27,6 +27,8 @@ Pass `-Drive E:` if CIRCUITPY shows up as a different letter. Don't edit files d
 
 **Adding a screen:** write a class with `name`, `show()` and `tick()` in `device/code.py` and add it to `SCREENS`. `device/billboard.py` draws the scrolling-text-plus-sprite layout any screen can reuse.
 
+**Wi-Fi (phone hotspot):** open `D:\settings.toml` on the board and add the two lines from `settings.example.toml` with your real hotspot name and password. That file stays on the board only: it's in `.gitignore`, and `deploy.ps1` never touches it. The hotspot must be 2.4 GHz (iPhone: turn on *Maximize Compatibility*). `device/wifi_link.py` connects in the background of the display loop, runs one HTTPS test, and prints `Wi-Fi:` / `HTTPS:` lines to the serial console. Without Wi-Fi, the moods and buttons work as usual.
+
 **Boot modes** (`device/boot.py`, applies after a hard reset):
 - Normal: your PC can edit CIRCUITPY.
 - Hold the **IO14** button while pressing reset: `code.py` can save files (status cache); CIRCUITPY is read-only on the PC.

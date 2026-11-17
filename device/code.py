@@ -3,6 +3,7 @@
 # Buttons:  MOOD button   = next mood (or jump back to the mood screen)
 #           SCREEN button = next screen
 # The current mood and screen are saved in non-volatile memory, so they survive restarts.
+# Wi-Fi (wifi_link.py) is optional: everything above keeps working without it.
 import time
 
 import board
@@ -10,6 +11,12 @@ import keypad
 import microcontroller
 
 from billboard import Billboard
+
+try:
+    from wifi_link import WifiLink
+except ImportError as error:  # e.g. a build without wifi; the clip still works offline
+    print("Wi-Fi disabled:", error)
+    WifiLink = None
 
 # If the buttons feel backwards on the clip, swap these two pins.
 MOOD_BUTTON = microcontroller.pin.GPIO0     # BOOT
@@ -94,6 +101,9 @@ MOOD_KEY, SCREEN_KEY = 0, 1
 board.DISPLAY.auto_refresh = False
 current = load_saved(NVM_SCREEN, len(SCREENS))
 show_screen(current)
+board.DISPLAY.refresh()
+
+wifi_link = WifiLink() if WifiLink else None
 
 frame_time = 1 / FPS
 while True:
@@ -109,6 +119,9 @@ while True:
         else:  # mood button on another screen: go back to the moods, same mood as before
             current = SCREENS.index(mood_screen)
             show_screen(current)
+
+    if wifi_link:
+        wifi_link.tick()  # returns at once, except during a (time-limited) connect attempt
 
     SCREENS[current].tick()
     board.DISPLAY.refresh()
