@@ -1,0 +1,4 @@
+# Copy to web/.dev.vars for local development (gitignored). Use long random values.
+# In production these are set with: npx wrangler secret put CONTROL_TOKEN  (and DEVICE_TOKEN)
+CONTROL_TOKEN=replace-with-a-long-random-string
+DEVICE_TOKEN=replace-with-a-different-long-random-string

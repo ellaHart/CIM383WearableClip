@@ -1,0 +1,10 @@
+[
+  {"id": "cheer", "text": "Hope you have a great day!", "bg": "#FFBB67", "sprite": "cheer"},
+  {"id": "friendly", "text": "Hi! Nice to meet you!", "bg": "#FFFFFF", "sprite": "friendly", "border": true},
+  {"id": "alert", "text": "Not Friendly!!! DO NOT APPROACH", "bg": "#A24A4A", "sprite": "alert"},
+  {"id": "love", "text": "How you doinnnnnnn <3", "bg": "#FFA7BA", "sprite": "love"},
+  {"id": "sleepy", "text": "Nap Time Nap Time Nap Time", "bg": "#BC99D4", "sprite": "sleepy"},
+  {"id": "laptop", "text": "Locked in! Do not disturb", "bg": "#B8B8B8", "sprite": "laptop"},
+  {"id": "judging", "text": "I'm judging you rn", "bg": "#D9D9D9", "sprite": "judging"},
+  {"id": "eating", "text": "Snack Time! Snack Time! Snack Time!", "bg": "#F7E9AE", "sprite": "eating"}
+]

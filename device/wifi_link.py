@@ -32,12 +32,14 @@ def _hint(message):
 
 
 class WifiLink:
-    def __init__(self):
+    def __init__(self, https_test=True):
+        """https_test: run one HTTPS GET after connecting (skipped when cloud sync is on)."""
         self.ssid = os.getenv("MOODCLIP_WIFI_SSID")
         self.password = os.getenv("MOODCLIP_WIFI_PASSWORD") or ""
         self.failures = 0
         self.next_attempt = time.monotonic() + FIRST_ATTEMPT_DELAY
         self.was_connected = False
+        self.https_test = https_test
         self.https_tested = False
         self.scanned = False
         self.pool = None
@@ -67,7 +69,7 @@ class WifiLink:
                 self.was_connected = True
                 self.failures = 0
                 self._report_connected()
-            elif not self.https_tested:  # a frame after connecting, so pauses don't stack
+            elif self.https_test and not self.https_tested:  # a frame after connecting, so pauses don't stack
                 self.https_tested = True
                 self.https_get_test()
             return
