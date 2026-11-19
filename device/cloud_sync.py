@@ -21,13 +21,24 @@ REQUEST_TIMEOUT = 5              # seconds; longest a single sync can pause the 
 ERROR_DELAYS = (10, 20, 40, 60)  # seconds between attempts after failures
 SLOW_SYNC = 1.5                  # print a note when a sync pauses the display longer than this
 NVM_VERSION = slice(2, 6)        # bytes 0-1 are mood/screen (code.py)
+ROOTS_FILE = "/certs/api_roots.pem"  # CAs for the API; CircuitPython's built-in list misses Vercel's
+
+
+def _load_roots():
+    try:
+        with open(ROOTS_FILE) as roots:
+            return roots.read()
+    except OSError:
+        print("Cloud: {} missing - using CircuitPython's built-in certificates".format(ROOTS_FILE))
+        return None
 
 
 class HttpsConnection:
     """Minimal HTTP/1.1 client over one kept-alive TLS socket, using only built-in modules."""
 
-    def __init__(self, host):
+    def __init__(self, host, cadata=None):
         self.host = host
+        self.cadata = cadata  # PEM root certificates to trust instead of the built-in list
         self.pool = None
         self.context = None
         self.sock = None
@@ -46,6 +57,8 @@ class HttpsConnection:
         if self.pool is None:
             self.pool = socketpool.SocketPool(wifi.radio)
             self.context = ssl.create_default_context()
+            if self.cadata:
+                self.context.load_verify_locations(cadata=self.cadata)
         sock = self.context.wrap_socket(
             self.pool.socket(self.pool.AF_INET, self.pool.SOCK_STREAM), server_hostname=self.host
         )
@@ -154,7 +167,7 @@ class CloudSync:
             print("Cloud: MOODCLIP_API_URL / MOODCLIP_DEVICE_TOKEN not set - remote control off")
             return
         try:
-            self.connection = HttpsConnection(_host_from_url(url))
+            self.connection = HttpsConnection(_host_from_url(url), _load_roots())
         except ValueError as error:
             print("Cloud:", error)
             return
@@ -183,6 +196,8 @@ class CloudSync:
             self.failures += 1
             self.next_sync = time.monotonic() + delay
             print("Cloud: sync failed ({}); next try in {} s".format(repr(error), delay))
+            if "X509" in repr(error):
+                print("       The clip doesn't trust the server's certificate. Check " + ROOTS_FILE)
         took = time.monotonic() - started
         if took > SLOW_SYNC:
             print("Cloud: sync paused the display for {:.1f} s".format(took))
