@@ -3,7 +3,10 @@
 # Buttons:  MOOD button   = next mood (or jump back to the mood screen)
 #           SCREEN button = next screen
 # The current mood and screen are saved in non-volatile memory, so they survive restarts.
-# Wi-Fi (wifi_link.py) is optional: everything above keeps working without it.
+# Wi-Fi (wifi_link.py) and remote control (cloud_sync.py) are optional:
+# everything above keeps working without them.
+import json
+import os
 import time
 
 import board
@@ -14,9 +17,10 @@ from billboard import Billboard
 
 try:
     from wifi_link import WifiLink
+    from cloud_sync import CloudSync
 except ImportError as error:  # e.g. a build without wifi; the clip still works offline
     print("Wi-Fi disabled:", error)
-    WifiLink = None
+    WifiLink = CloudSync = None
 
 # If the buttons feel backwards on the clip, swap these two pins.
 MOOD_BUTTON = microcontroller.pin.GPIO0     # BOOT
@@ -24,17 +28,12 @@ SCREEN_BUTTON = microcontroller.pin.GPIO14  # IO14
 
 FPS = 18  # measured max is ~19 fps for the billboard at TEXT_SCALE 5
 
-# Mood number = position in this list (1-9). Colours come from the Figma design.
-STATES = (
-    {"text": "Hope you have a great day!", "bg": 0xFFBB67, "sprite": "cheer"},          # 1
-    {"text": "Hi! Nice to meet you!", "bg": 0xFFFFFF, "sprite": "friendly", "border": True},  # 2
-    {"text": "Not Friendly!!! DO NOT APPROACH", "bg": 0xA24A4A, "sprite": "alert"},     # 3
-    {"text": "How you doinnnnnnn <3", "bg": 0xFFA7BA, "sprite": "love"},                # 4
-    {"text": "Nap Time Nap Time Nap Time", "bg": 0xBC99D4, "sprite": "sleepy"},         # 5
-    {"text": "Locked in! Do not disturb", "bg": 0xB8B8B8, "sprite": "laptop"},          # 6
-    {"text": "I'm judging you rn", "bg": 0xD9D9D9, "sprite": "judging"},      # 7
-    {"text": "Snack Time! Snack Time! Snack Time!", "bg": 0xF7E9AE, "sprite": "eating"},  # 8
-)
+# Moods live in moods.json (shared with the website). Mood number = position in that list.
+# Edit text/colours there; "id" is how the website refers to a mood, so keep it stable.
+with open("/moods.json") as moods_file:
+    STATES = json.load(moods_file)
+for mood in STATES:
+    mood["bg"] = int(mood["bg"].lstrip("#"), 16)
 
 # Bytes in microcontroller.nvm (unwritten bytes read as 255).
 NVM_MOOD = 0
@@ -56,6 +55,7 @@ def save(slot, value):
 # To add one (drawings, photos, a game...), write a class like these and add it to SCREENS.
 
 class MoodScreen:
+    id = "moods"  # mode id shared with the website (web/lib/core.js MODES)
     name = "Moods"
 
     def __init__(self):
@@ -65,9 +65,12 @@ class MoodScreen:
         self.view = Billboard(STATES[self.index])
         print("Mood", self.index + 1, "-", STATES[self.index]["text"])
 
+    def set_mood(self, index):
+        self.index = index
+        save(NVM_MOOD, index)
+
     def next_mood(self):
-        self.index = (self.index + 1) % len(STATES)
-        save(NVM_MOOD, self.index)
+        self.set_mood((self.index + 1) % len(STATES))
         self.show()
 
     def tick(self):
@@ -75,6 +78,7 @@ class MoodScreen:
 
 
 class SpotifyScreen:
+    id = "spotify"
     name = "Spotify"
 
     def show(self):
@@ -103,7 +107,30 @@ current = load_saved(NVM_SCREEN, len(SCREENS))
 show_screen(current)
 board.DISPLAY.refresh()
 
-wifi_link = WifiLink() if WifiLink else None
+
+
+# --- Remote control (website -> API -> clip) ---
+def current_status():
+    return {"mode": SCREENS[current].id, "mood": STATES[mood_screen.index]["id"]}
+
+
+def apply_remote(command):
+    """Show what the website asked for. Returns False for modes the clip doesn't have yet."""
+    global current
+    if command.get("mode") != "moods":
+        return False
+    for index, mood in enumerate(STATES):
+        if mood["id"] == command.get("mood"):
+            mood_screen.set_mood(index)
+            current = SCREENS.index(mood_screen)
+            show_screen(current)
+            return True
+    return False
+
+
+cloud_configured = bool(os.getenv("MOODCLIP_API_URL"))
+wifi_link = WifiLink(https_test=not cloud_configured) if WifiLink else None
+cloud = CloudSync(wifi_link, current_status, apply_remote) if wifi_link and wifi_link.ssid else None
 
 frame_time = 1 / FPS
 while True:
@@ -119,9 +146,13 @@ while True:
         else:  # mood button on another screen: go back to the moods, same mood as before
             current = SCREENS.index(mood_screen)
             show_screen(current)
+        if cloud:
+            cloud.sync_soon()  # tell the website about the button press
 
     if wifi_link:
         wifi_link.tick()  # returns at once, except during a (time-limited) connect attempt
+    if cloud:
+        cloud.tick()  # returns at once, except every few seconds for a short HTTPS check-in
 
     SCREENS[current].tick()
     board.DISPLAY.refresh()

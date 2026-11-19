@@ -29,6 +29,24 @@ Pass `-Drive E:` if CIRCUITPY shows up as a different letter. Don't edit files d
 
 **Wi-Fi (phone hotspot):** open `D:\settings.toml` on the board and add the two lines from `settings.example.toml` with your real hotspot name and password. That file stays on the board only: it's in `.gitignore`, and `deploy.ps1` never touches it. The hotspot must be 2.4 GHz (iPhone: turn on *Maximize Compatibility*). `device/wifi_link.py` connects in the background of the display loop, runs one HTTPS test, and prints `Wi-Fi:` / `HTTPS:` lines to the serial console. Without Wi-Fi, the moods and buttons work as usual.
 
+**Moods** are listed in `device/moods.json`, shared by the clip and the website. Keep each `id` stable; it's how the website refers to a mood.
+
+## Website controller (`web/`)
+
+A phone website that picks the clip's mood remotely, through Vercel Functions and an Upstash Redis database. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+**Run it locally** (needs Node.js; no accounts; uses an in-memory store):
+```powershell
+cd web
+npm install
+copy .env.example .env.local   # then put two long random values in it
+npm run dev                    # http://127.0.0.1:3000
+```
+
+**Deploy:** import this GitHub repo in Vercel with **Root Directory = `web`**, add Upstash Redis from the Vercel Marketplace, and set `CONTROL_TOKEN` / `DEVICE_TOKEN` as environment variables. Every push then deploys automatically. Step-by-step: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#deploying-on-vercel).
+
+Then add `MOODCLIP_API_URL` and `MOODCLIP_DEVICE_TOKEN` to `D:\settings.toml` (see `settings.example.toml`). The clip prints `Cloud:` lines on the serial console.
+
 **Boot modes** (`device/boot.py`, applies after a hard reset):
 - Normal: your PC can edit CIRCUITPY.
 - Hold the **IO14** button while pressing reset: `code.py` can save files (status cache); CIRCUITPY is read-only on the PC.
