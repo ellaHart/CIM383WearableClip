@@ -52,31 +52,25 @@ function loadImage(path) {
 }
 
 // Magic 8 Ball answer triangle in assets/magic8/answer.png (same numbers as device/magic8.py).
-const M8 = { centerX: 160, top: 22, half: 96, apex: 153, textTop: 30, margin: 8 };
+const M8 = { centerX: 160, top: 22, half: 96, apex: 153, textTop: 24, margin: 2, scale: 2, inkRows: 10 };
 const FONT_W = 6;  // the clip's built-in font cell, before scaling
 const FONT_H = 12;
 
-// Same wrapping as magic8.layout() on the clip: 2x text if it fits the triangle, else 1x.
+// Same wrapping as magic8.layout() on the clip: one text size, long answers wrap onto more lines.
 function magic8Layout(answer) {
-  const allWords = answer.replace("–", "-").split(/\s+/);
-  for (const scale of [2, 1]) {
-    const words = [...allWords];
-    const lines = [];
-    let y = M8.textTop;
-    let fits = true;
-    while (words.length) {
-      const bottom = y + FONT_H * scale;
-      const half = (M8.half * (M8.apex - bottom)) / (M8.apex - M8.top) - M8.margin;
-      const limit = Math.floor((2 * half) / (FONT_W * scale));
-      let line = words.shift();
-      if (line.length > limit) { fits = false; break; }
-      while (words.length && line.length + 1 + words[0].length <= limit) line += ` ${words.shift()}`;
-      lines.push(line);
-      y += FONT_H * scale;
-    }
-    if (fits) return { scale, lines };
+  const words = answer.replace("–", "-").split(/\s+/);
+  const lines = [];
+  let y = M8.textTop;
+  while (words.length) {
+    const bottom = y + M8.inkRows * M8.scale;
+    const half = (M8.half * (M8.apex - bottom)) / (M8.apex - M8.top) - M8.margin;
+    const limit = Math.floor((2 * half) / (FONT_W * M8.scale));
+    let line = words.shift();
+    while (words.length && line.length + 1 + words[0].length <= limit) line += ` ${words.shift()}`;
+    lines.push(line);
+    y += FONT_H * M8.scale;
   }
-  return { scale: 1, lines: [answer] };
+  return lines;
 }
 
 function drawPixelText(ctx, text, x, y, scale, color) {
@@ -139,9 +133,8 @@ class Preview {
     if (art) ctx.drawImage(art, 0, 0, 320, 170);
     else if (screen.caption) drawPixelText(ctx, screen.caption, 160 - screen.caption.length * FONT_W, 73, 2, "#fff");
     if (screen.answer) {
-      const { scale, lines } = magic8Layout(screen.answer);
-      lines.forEach((line, i) =>
-        drawPixelText(ctx, line, M8.centerX - (line.length * FONT_W * scale) / 2, M8.textTop + i * FONT_H * scale, scale, "#fff"));
+      magic8Layout(screen.answer).forEach((line, i) =>
+        drawPixelText(ctx, line, M8.centerX - (line.length * FONT_W * M8.scale) / 2, M8.textTop + i * FONT_H * M8.scale, M8.scale, "#fff"));
     }
 
     const img = screen.sprite ? loadImage(`sprites/${screen.sprite}.png`) : null;

@@ -61,8 +61,10 @@ TRI_CENTER_X = 160
 TRI_TOP_Y = 22
 TRI_TOP_HALF = 96
 TRI_APEX_Y = 153
-TEXT_TOP = TRI_TOP_Y + 8  # first text line starts this far down
-TEXT_MARGIN = 8           # keep text this far inside the triangle's slanted edges
+TEXT_SCALE = 2           # every answer uses the same size; long ones wrap onto more lines
+TEXT_TOP = TRI_TOP_Y + 2  # first text line starts this far down
+TEXT_MARGIN = 2           # keep text this far inside the triangle's slanted edges
+TEXT_INK_ROWS = 10        # rows of each 12-row font cell that hold letters (the rest is gap)
 
 _art_cache = {}
 random.seed(int.from_bytes(os.urandom(4), "little"))  # hardware randomness, fresh each boot
@@ -84,32 +86,21 @@ def _display_text(answer):
 
 
 def layout(answer):
-    """Wrap the answer into lines that fit inside the triangle. Returns (scale, lines).
-
-    Tries the bigger 2x text first and falls back to 1x for long answers.
-    """
-    words_all = _display_text(answer).split()
-    for scale in (2, 1):
-        line_height = CHAR_H * scale
-        char_width = CHAR_W * scale
-        words = list(words_all)
-        lines = []
-        y = TEXT_TOP
-        while words:
-            # The triangle narrows downwards, so the bottom of each line is the tightest spot.
-            bottom = y + line_height
-            half = TRI_TOP_HALF * (TRI_APEX_Y - bottom) / (TRI_APEX_Y - TRI_TOP_Y) - TEXT_MARGIN
-            limit = int(2 * half // char_width)
-            line = words.pop(0)
-            if len(line) > limit:
-                break
-            while words and len(line) + 1 + len(words[0]) <= limit:
-                line += " " + words.pop(0)
-            lines.append(line)
-            y += line_height
-        else:
-            return scale, lines
-    return 1, [_display_text(answer)]
+    """Wrap the answer, at TEXT_SCALE, into lines that fit inside the triangle."""
+    words = _display_text(answer).split()
+    lines = []
+    y = TEXT_TOP
+    while words:
+        # The triangle narrows downwards, so the bottom of each line's letters is the tightest spot.
+        bottom = y + TEXT_INK_ROWS * TEXT_SCALE
+        half = TRI_TOP_HALF * (TRI_APEX_Y - bottom) / (TRI_APEX_Y - TRI_TOP_Y) - TEXT_MARGIN
+        limit = int(2 * half // (CHAR_W * TEXT_SCALE))
+        line = words.pop(0)  # a word that's too long still gets its own line rather than shrinking
+        while words and len(line) + 1 + len(words[0]) <= limit:
+            line += " " + words.pop(0)
+        lines.append(line)
+        y += CHAR_H * TEXT_SCALE
+    return lines
 
 
 class Magic8Screen:
@@ -186,8 +177,8 @@ class Magic8Screen:
             root.append(displayio.TileGrid(bitmap, pixel_shader=palette))
         else:
             rect(root, FALLBACK_BG, 0, 0, WIDTH, HEIGHT)
-        scale, lines = layout(answer)
-        for i, line in enumerate(lines):
-            x = TRI_CENTER_X - len(line) * CHAR_W * scale // 2
-            root.append(text_line(line, x, TEXT_TOP + i * CHAR_H * scale, scale, ANSWER_COLOR))
+        for i, line in enumerate(layout(answer)):
+            x = TRI_CENTER_X - len(line) * CHAR_W * TEXT_SCALE // 2
+            y = TEXT_TOP + i * CHAR_H * TEXT_SCALE
+            root.append(text_line(line, x, y, TEXT_SCALE, ANSWER_COLOR))
         display.root_group = root
