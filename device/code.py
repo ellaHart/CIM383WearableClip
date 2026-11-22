@@ -2,7 +2,7 @@
 #
 # Buttons:  MOOD button   = bottom button: next mood on the Moods screen, the screen's own
 #                           action where it has one (Magic 8 Ball: shake), else back to Moods
-#           SCREEN button = top button: next screen (Moods -> Spotify -> Magic 8 Ball)
+#           SCREEN button = top button: next screen (Moods -> Spotify -> Magic 8 Ball -> Aquarium)
 # The current mood and screen are saved in non-volatile memory, so they survive restarts.
 # Wi-Fi (wifi_link.py) and remote control (cloud_sync.py) are optional:
 # everything above keeps working without them.
@@ -15,6 +15,7 @@ import keypad
 import microcontroller
 
 from billboard import Billboard
+from aquarium import AquariumScreen
 from magic8 import Magic8Screen
 
 try:
@@ -95,7 +96,7 @@ class SpotifyScreen:
 
 mood_screen = MoodScreen()
 magic8_screen = Magic8Screen()
-SCREENS = (mood_screen, SpotifyScreen(), magic8_screen)  # new screens go at the end (NVM index)
+SCREENS = (mood_screen, SpotifyScreen(), magic8_screen, AquariumScreen())  # new screens go at the end (NVM index)
 
 
 def show_screen(index):
@@ -127,11 +128,12 @@ def apply_remote(command):
     """Show what the website asked for. Returns False for modes the clip doesn't have yet."""
     global current
     mode = command.get("mode")
-    if mode == magic8_screen.id:
-        current = SCREENS.index(magic8_screen)
-        show_screen(current)
-        return True
-    if mode != "moods":
+    if mode != "moods":  # other modes have no settings yet: just switch to that screen
+        for index, screen in enumerate(SCREENS):
+            if screen.id == mode:
+                current = index
+                show_screen(current)
+                return True
         return False
     for index, mood in enumerate(STATES):
         if mood["id"] == command.get("mood"):

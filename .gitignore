@@ -22,4 +22,5 @@ desktop.ini
 .vercel/
 web/public/sprites/
 web/public/magic8/
+web/public/aquarium/
 web/lib/moods.generated.js

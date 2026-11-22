@@ -13,7 +13,7 @@ export const MODES = [
   { id: "moods", name: "Mood Screens", status: "ready", summary: "Pixel-art moods with scrolling text." },
   { id: "spotify", name: "Spotify Now Playing", status: "planned", summary: "Current song, artist and album art." },
   { id: "magic8", name: "Magic 8 Ball", status: "ready", summary: "Press the clip's bottom button to shake it for an answer." },
-  { id: "aquarium", name: "Little Aquarium", status: "planned", summary: "Fish swim around; the bottom button drops food." },
+  { id: "aquarium", name: "Little Aquarium", status: "ready", summary: "A clownfish, a blue tang and a betta swim around. Feeding is coming soon." },
   { id: "custom", name: "Custom Text / Photo", status: "planned", summary: "Your own message, background and image." },
 ];
 const MODE_IDS = new Set(MODES.map((mode) => mode.id));

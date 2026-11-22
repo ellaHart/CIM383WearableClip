@@ -37,7 +37,7 @@ Mood ids come from `device/moods.json`, the single source shared by the clip and
 (`npm run build` turns it into `web/lib/moods.generated.js`):
 `cheer, friendly, alert, love, sleepy, laptop, judging, eating`.
 
-**Modes**: `moods`, `magic8` (ready); `spotify`, `aquarium`, `custom` (planned).
+**Modes**: `moods`, `magic8`, `aquarium` (ready); `spotify`, `custom` (planned).
 
 **Desired state** (what the website asks for):
 ```json

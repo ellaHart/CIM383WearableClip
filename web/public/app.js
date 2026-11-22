@@ -80,6 +80,13 @@ function drawPixelText(ctx, text, x, y, scale, color) {
   [...text].forEach((char, i) => ctx.fillText(char, x + i * FONT_W * scale, y));
 }
 
+// Aquarium preview: first frame of each fish at its starting spot (same as device/aquarium.py).
+const AQUARIUM_FISH = [
+  { sheet: "aquarium/clownfish.png", w: 38, h: 30, x: 40, y: 26 },
+  { sheet: "aquarium/blue_tang.png", w: 38, h: 30, x: 230, y: 70, flip: true },
+  { sheet: "aquarium/betta.png", w: 54, h: 42, x: 140, y: 44 },
+];
+
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 class Preview {
@@ -96,7 +103,7 @@ class Preview {
   }
 
   set(screen) {
-    const key = screen ? `${screen.text}|${screen.bg}|${screen.sprite}|${screen.border}|${screen.image}|${screen.answer}` : "";
+    const key = screen ? `${screen.text}|${screen.bg}|${screen.sprite}|${screen.border}|${screen.image}|${screen.answer}|${Boolean(screen.fish)}` : "";
     if (key === this.key) return;
     this.key = key;
     this.screen = screen;
@@ -128,10 +135,25 @@ class Preview {
     ctx.fillRect(0, 0, 320, 170);
     if (!screen) return;
 
-    // Full-screen artwork (Magic 8 Ball); falls back to a caption if the image is missing.
+    // Full-screen artwork (Magic 8 Ball, aquarium); falls back to a caption if the image is missing.
     const art = loadImage(screen.image);
-    if (art) ctx.drawImage(art, 0, 0, 320, 170);
+    if (art && screen.cover) {
+      // Fill 320x170 without stretching, cropping the overflow evenly (like the clip's background).
+      const scale = Math.max(320 / art.naturalWidth, 170 / art.naturalHeight);
+      const sw = 320 / scale, sh = 170 / scale;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(art, (art.naturalWidth - sw) / 2, (art.naturalHeight - sh) / 2, sw, sh, 0, 0, 320, 170);
+      ctx.imageSmoothingEnabled = false;
+    } else if (art) ctx.drawImage(art, 0, 0, 320, 170);
     else if (screen.caption) drawPixelText(ctx, screen.caption, 160 - screen.caption.length * FONT_W, 73, 2, "#fff");
+    for (const fish of screen.fish ?? []) {
+      const sheet = loadImage(fish.sheet);
+      if (!sheet) continue;
+      ctx.save();
+      if (fish.flip) { ctx.translate(fish.x * 2 + fish.w, 0); ctx.scale(-1, 1); }
+      ctx.drawImage(sheet, 0, 0, fish.w, fish.h, fish.x, fish.y, fish.w, fish.h);
+      ctx.restore();
+    }
     if (screen.answer) {
       magic8Layout(screen.answer).forEach((line, i) =>
         drawPixelText(ctx, line, M8.centerX - (line.length * FONT_W * M8.scale) / 2, M8.textTop + i * FONT_H * M8.scale, M8.scale, "#fff"));
@@ -193,6 +215,7 @@ function shownScreen() {
   const reported = state.reported;
   const mode = reported?.mode ?? state.desired?.mode;
   if (mode === "spotify") return SPOTIFY_PLACEHOLDER;
+  if (mode === "aquarium") return { image: "aquarium/background.jpg", cover: true, fish: AQUARIUM_FISH, bg: "#2E8FC0" };
   if (mode === "magic8") {
     const m8 = reported?.mode === "magic8" ? reported.magic8 : null;
     return m8?.state === "answer" && m8.answer
