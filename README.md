@@ -25,7 +25,9 @@ Pass `-Drive E:` if CIRCUITPY shows up as a different letter. Don't edit files d
 
 **Magic 8 Ball art:** `assets/magic8/idle.png` (front, with "Ask a question...") and `assets/magic8/answer.png` (back, empty triangle), both 320×170 PNG. The same command converts them to `device/magic8/*.bmp`. The 20 answers and the triangle position live in `device/magic8.py`.
 
-**Buttons:** BOOT (bottom) = next mood on Moods, shake on Magic 8 Ball, otherwise back to Moods; IO14 (top) = next screen (Moods → Spotify → Magic 8 Ball). The current mood and screen are remembered after a restart. Swap `MOOD_BUTTON`/`SCREEN_BUTTON` in `device/code.py` if they feel backwards.
+**Aquarium art:** `assets/aquarium/background.jpg` (any size; scaled to fill 320×170, cropping evenly, and saved as a smooth 16-bit image) plus `clownfish.png`, `blue_tang.png` and `betta.png` spritesheets (8 frames in a row, facing right, transparent background). The same command converts them to `device/aquarium/`. Speeds, depths and frame sizes live in `SPECIES` in `device/aquarium.py`.
+
+**Buttons:** BOOT (bottom) = next mood on Moods, shake on Magic 8 Ball, otherwise back to Moods; IO14 (top) = next screen (Moods → Spotify → Magic 8 Ball → Aquarium). On the Aquarium the bottom button does nothing yet (it's reserved for feeding). The current mood and screen are remembered after a restart. Swap `MOOD_BUTTON`/`SCREEN_BUTTON` in `device/code.py` if they feel backwards.
 
 **Adding a screen:** write a class with `name`, `show()` and `tick()` in `device/code.py` and add it to `SCREENS`. `device/billboard.py` draws the scrolling-text-plus-sprite layout any screen can reuse.
 

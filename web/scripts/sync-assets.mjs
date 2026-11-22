@@ -1,6 +1,7 @@
 // Build step (Vercel runs it as `npm run build`; the local server runs it too):
 //  - copies the clip's sprite PNGs into web/public/sprites so the website uses the same art
 //  - copies the Magic 8 Ball screens (assets/magic8) into web/public/magic8 for the preview
+//  - copies the aquarium art (assets/aquarium) into web/public/aquarium for the preview
 //  - turns device/moods.json into web/lib/moods.generated.js for the API
 // All outputs are gitignored; device/moods.json and assets/ stay the source of truth.
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -23,6 +24,13 @@ mkdirSync(magic8Target, { recursive: true });
 const magic8Art = existsSync(magic8Source) ? readdirSync(magic8Source).filter((name) => name.endsWith(".png")) : [];
 for (const name of magic8Art) cpSync(join(magic8Source, name), join(magic8Target, name));
 
+// Aquarium background + fish spritesheets for the website preview (optional, like Magic 8).
+const aquariumSource = join(root, "assets", "aquarium");
+const aquariumTarget = join(web, "public", "aquarium");
+mkdirSync(aquariumTarget, { recursive: true });
+const aquariumArt = existsSync(aquariumSource) ? readdirSync(aquariumSource).filter((name) => /\.(png|jpg)$/.test(name)) : [];
+for (const name of aquariumArt) cpSync(join(aquariumSource, name), join(aquariumTarget, name));
+
 const moods = JSON.parse(readFileSync(join(root, "device", "moods.json"), "utf8"));
 const ids = new Set();
 for (const mood of moods) {
@@ -35,4 +43,4 @@ writeFileSync(
   `// Generated from device/moods.json by scripts/sync-assets.mjs. Don't edit.\nexport default ${JSON.stringify(moods, null, 2)};\n`,
 );
 
-console.log(`Copied ${sprites.length} sprites, ${magic8Art.length} Magic 8 images and ${moods.length} moods`);
+console.log(`Copied ${sprites.length} sprites, ${magic8Art.length} Magic 8 images, ${aquariumArt.length} aquarium images and ${moods.length} moods`);
