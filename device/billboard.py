@@ -1,6 +1,7 @@
 # Billboard view: full-width scrolling text on top, pixel-art sprite below.
 # Any screen can use it:  view = Billboard({"text": ..., "bg": 0xRRGGBB, "sprite": "name"})
 # then call view.tick() once per frame.
+import bitmaptools
 import board
 import displayio
 import terminalio
@@ -48,11 +49,14 @@ def load_bmp(path):
         bitmap = displayio.Bitmap(width, height, colors)
         row_size = (width + 3) & ~3
         f.seek(data_offset)
-        for row in range(height):
-            line = f.read(row_size)
-            y = height - 1 - row
-            for x in range(width):
-                bitmap[x, y] = line[x]
+        if row_size == width:  # no row padding: one fast built-in read (full-screen art too)
+            bitmaptools.readinto(bitmap, f, 8, reverse_rows=True)
+        else:
+            for row in range(height):
+                line = f.read(row_size)
+                y = height - 1 - row
+                for x in range(width):
+                    bitmap[x, y] = line[x]
     return bitmap, palette
 
 
@@ -66,12 +70,12 @@ def rect(group, color, x, y, width, height):
     group.append(vectorio.Rectangle(pixel_shader=solid(color), x=x, y=y, width=width, height=height))
 
 
-def text_line(text):
-    """One row of built-in-font tiles holding the whole message."""
+def text_line(text, x=WIDTH, y=TEXT_Y, scale=TEXT_SCALE, color=TEXT_COLOR):
+    """One row of built-in-font tiles holding the whole message (defaults: billboard text)."""
     palette = displayio.Palette(2)
     palette[0] = 0x000000
     palette.make_transparent(0)
-    palette[1] = TEXT_COLOR
+    palette[1] = color
     grid = displayio.TileGrid(
         font.bitmap, pixel_shader=palette, width=len(text), height=1,
         tile_width=CHAR_W, tile_height=CHAR_H,
@@ -80,7 +84,7 @@ def text_line(text):
     for i, char in enumerate(text):
         glyph = font.get_glyph(ord(char)) or fallback
         grid[i] = glyph.tile_index
-    group = displayio.Group(scale=TEXT_SCALE, x=WIDTH, y=TEXT_Y)
+    group = displayio.Group(scale=scale, x=x, y=y)
     group.append(grid)
     return group
 

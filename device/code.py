@@ -1,7 +1,8 @@
 # Mood Clip: switches between screens (moods, Spotify, later drawings/photos/games).
 #
-# Buttons:  MOOD button   = next mood (or jump back to the mood screen)
-#           SCREEN button = next screen
+# Buttons:  MOOD button   = bottom button: next mood on the Moods screen, the screen's own
+#                           action where it has one (Magic 8 Ball: shake), else back to Moods
+#           SCREEN button = top button: next screen (Moods -> Spotify -> Magic 8 Ball)
 # The current mood and screen are saved in non-volatile memory, so they survive restarts.
 # Wi-Fi (wifi_link.py) and remote control (cloud_sync.py) are optional:
 # everything above keeps working without them.
@@ -14,6 +15,7 @@ import keypad
 import microcontroller
 
 from billboard import Billboard
+from magic8 import Magic8Screen
 
 try:
     from wifi_link import WifiLink
@@ -51,7 +53,9 @@ def save(slot, value):
 
 
 # --- Screens ---
-# A screen needs: name, show() to draw itself, tick() called every frame.
+# A screen needs: id, name, show() to draw itself, tick() called every frame.
+# Optional: on_button() for the bottom button, and an `animating` flag that pauses
+# Wi-Fi/cloud work while it's True (so animations stay smooth).
 # To add one (drawings, photos, a game...), write a class like these and add it to SCREENS.
 
 class MoodScreen:
@@ -90,7 +94,8 @@ class SpotifyScreen:
 
 
 mood_screen = MoodScreen()
-SCREENS = (mood_screen, SpotifyScreen())
+magic8_screen = Magic8Screen()
+SCREENS = (mood_screen, SpotifyScreen(), magic8_screen)  # new screens go at the end (NVM index)
 
 
 def show_screen(index):
@@ -111,13 +116,22 @@ board.DISPLAY.refresh()
 
 # --- Remote control (website -> API -> clip) ---
 def current_status():
-    return {"mode": SCREENS[current].id, "mood": STATES[mood_screen.index]["id"]}
+    status = {"mode": SCREENS[current].id, "mood": STATES[mood_screen.index]["id"]}
+    if magic8_screen.last_answer or SCREENS[current] is magic8_screen:
+        status["magic8"] = {"state": magic8_screen.state, "answer": magic8_screen.last_answer,
+                            "count": magic8_screen.count}
+    return status
 
 
 def apply_remote(command):
     """Show what the website asked for. Returns False for modes the clip doesn't have yet."""
     global current
-    if command.get("mode") != "moods":
+    mode = command.get("mode")
+    if mode == magic8_screen.id:
+        current = SCREENS.index(magic8_screen)
+        show_screen(current)
+        return True
+    if mode != "moods":
         return False
     for index, mood in enumerate(STATES):
         if mood["id"] == command.get("mood"):
@@ -143,16 +157,21 @@ while True:
             show_screen(current)
         elif SCREENS[current] is mood_screen:
             mood_screen.next_mood()
+        elif hasattr(SCREENS[current], "on_button"):  # e.g. Magic 8 Ball: shake
+            SCREENS[current].on_button()
         else:  # mood button on another screen: go back to the moods, same mood as before
             current = SCREENS.index(mood_screen)
             show_screen(current)
         if cloud:
-            cloud.sync_soon()  # tell the website about the button press
+            cloud.sync_soon()  # tell the website about the button press (after any animation)
 
-    if wifi_link:
-        wifi_link.tick()  # returns at once, except during a (time-limited) connect attempt
-    if cloud:
-        cloud.tick()  # returns at once, except every few seconds for a short HTTPS check-in
+    # Network calls can pause the loop briefly, so skip them while a screen is animating;
+    # they run again on the first frame after (e.g. reporting a new Magic 8 answer).
+    if not getattr(SCREENS[current], "animating", False):
+        if wifi_link:
+            wifi_link.tick()  # returns at once, except during a (time-limited) connect attempt
+        if cloud:
+            cloud.tick()  # returns at once, except every few seconds for a short HTTPS check-in
 
     SCREENS[current].tick()
     board.DISPLAY.refresh()

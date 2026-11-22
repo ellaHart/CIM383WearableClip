@@ -12,7 +12,7 @@ import MOODS from "./moods.generated.js"; // copied from device/moods.json by sc
 export const MODES = [
   { id: "moods", name: "Mood Screens", status: "ready", summary: "Pixel-art moods with scrolling text." },
   { id: "spotify", name: "Spotify Now Playing", status: "planned", summary: "Current song, artist and album art." },
-  { id: "magic8", name: "Magic 8 Ball", status: "planned", summary: "Press the bottom button to shake for an answer." },
+  { id: "magic8", name: "Magic 8 Ball", status: "ready", summary: "Press the clip's bottom button to shake it for an answer." },
   { id: "aquarium", name: "Little Aquarium", status: "planned", summary: "Fish swim around; the bottom button drops food." },
   { id: "custom", name: "Custom Text / Photo", status: "planned", summary: "Your own message, background and image." },
 ];
@@ -131,9 +131,18 @@ function deviceView(desired) {
 function cleanReport(body) {
   const pick = (value, type, max = 64) =>
     typeof value === type ? (type === "string" ? value.slice(0, max) : value) : null;
+  const magic8 = body.magic8 && typeof body.magic8 === "object" ? body.magic8 : null;
   return {
     mode: MODE_IDS.has(body.mode) ? body.mode : null,
     mood: MOOD_IDS.has(body.mood) ? body.mood : null,
+    // Magic 8 Ball: what its screen shows and the latest answer (null before the first shake).
+    magic8: magic8
+      ? {
+          state: ["idle", "shaking", "answer"].includes(magic8.state) ? magic8.state : null,
+          answer: pick(magic8.answer, "string", 40),
+          count: pick(magic8.count, "number"),
+        }
+      : null,
     applied_version: pick(body.applied_version, "number"),
     rssi: pick(body.rssi, "number"),
     ip: pick(body.ip, "string", 40),
