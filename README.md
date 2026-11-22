@@ -23,7 +23,9 @@ Pass `-Drive E:` if CIRCUITPY shows up as a different letter. Don't edit files d
 
 **Sprites:** put 40×40 PNGs in `assets/sprites/`, then run `python tools/convert_sprites.py` (needs `pip install pillow`) to make the BMPs in `device/sprites/`, and deploy.
 
-**Buttons:** BOOT = next mood (or back to the mood screen), IO14 = next screen (Moods → Spotify → …). The current mood and screen are remembered after a restart. Swap `MOOD_BUTTON`/`SCREEN_BUTTON` in `device/code.py` if they feel backwards.
+**Magic 8 Ball art:** `assets/magic8/idle.png` (front, with "Ask a question...") and `assets/magic8/answer.png` (back, empty triangle), both 320×170 PNG. The same command converts them to `device/magic8/*.bmp`. The 20 answers and the triangle position live in `device/magic8.py`.
+
+**Buttons:** BOOT (bottom) = next mood on Moods, shake on Magic 8 Ball, otherwise back to Moods; IO14 (top) = next screen (Moods → Spotify → Magic 8 Ball). The current mood and screen are remembered after a restart. Swap `MOOD_BUTTON`/`SCREEN_BUTTON` in `device/code.py` if they feel backwards.
 
 **Adding a screen:** write a class with `name`, `show()` and `tick()` in `device/code.py` and add it to `SCREENS`. `device/billboard.py` draws the scrolling-text-plus-sprite layout any screen can reuse.
 

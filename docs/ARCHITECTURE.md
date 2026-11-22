@@ -37,7 +37,7 @@ Mood ids come from `device/moods.json`, the single source shared by the clip and
 (`npm run build` turns it into `web/lib/moods.generated.js`):
 `cheer, friendly, alert, love, sleepy, laptop, judging, eating`.
 
-**Modes**: `moods` (ready), `spotify`, `magic8`, `aquarium`, `custom` (planned).
+**Modes**: `moods`, `magic8` (ready); `spotify`, `aquarium`, `custom` (planned).
 
 **Desired state** (what the website asks for):
 ```json
@@ -57,8 +57,11 @@ Mood ids come from `device/moods.json`, the single source shared by the clip and
 **Reported state** (what the clip says it shows):
 ```json
 { "mode": "moods", "mood": "love", "applied_version": 3, "rssi": -41, "ip": "172.20.10.4",
-  "uptime": 120, "battery": null, "firmware": "circuitpython-10.3.2", "last_seen": "…" }
+  "uptime": 120, "battery": null, "firmware": "circuitpython-10.3.2", "last_seen": "…",
+  "magic8": { "state": "answer", "answer": "It is certain", "count": 3 } }
 ```
+`magic8` is present once the clip has shown the Magic 8 Ball screen: `state` is
+`idle`, `shaking` or `answer`; `count` is answers revealed since the clip started.
 `version` goes up with every website command (Redis `INCR`). The clip applies each version once
 and stores the last applied version in NVM, so physical button presses (and restarts) are never
 overwritten by an old command. The website shows "Queued" until `applied_version` catches up,

@@ -1,4 +1,6 @@
-"""Convert assets/sprites/*.png into 8-bit indexed BMPs in device/sprites/.
+"""Convert the artwork PNGs into 8-bit indexed BMPs for the clip:
+    assets/sprites/*.png -> device/sprites/*.bmp   (mood sprites)
+    assets/magic8/*.png  -> device/magic8/*.bmp    (Magic 8 Ball screens)
 
 Palette index 0 is reserved for transparency (stored as magenta), so the
 device can call palette.make_transparent(0). Needs Pillow:  pip install pillow
@@ -9,13 +11,15 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "assets" / "sprites"
-TARGET = ROOT / "device" / "sprites"
+FOLDERS = (
+    (ROOT / "assets" / "sprites", ROOT / "device" / "sprites"),
+    (ROOT / "assets" / "magic8", ROOT / "device" / "magic8"),
+)
 TRANSPARENT_KEY = (255, 0, 255)
 MAX_COLORS = 255  # 256 palette slots minus the transparent one
 
 
-def convert(png_path):
+def convert(png_path, target):
     image = Image.open(png_path).convert("RGBA")
     opaque = [(x, y) for y in range(image.height) for x in range(image.width) if image.getpixel((x, y))[3] >= 128]
 
@@ -33,12 +37,13 @@ def convert(png_path):
     for xy in opaque:
         indexed.putpixel(xy, index_of[rgb.getpixel(xy)])
 
-    out_path = TARGET / (png_path.stem + ".bmp")
+    out_path = target / (png_path.stem + ".bmp")
     indexed.save(out_path)
     print(f"{png_path.name} -> {out_path.relative_to(ROOT)}  {image.size[0]}x{image.size[1]}, {len(palette)} colors")
 
 
 if __name__ == "__main__":
-    TARGET.mkdir(parents=True, exist_ok=True)
-    for png in sorted(SOURCE.glob("*.png")):
-        convert(png)
+    for source, target in FOLDERS:
+        target.mkdir(parents=True, exist_ok=True)
+        for png in sorted(source.glob("*.png")):
+            convert(png, target)

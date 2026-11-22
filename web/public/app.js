@@ -38,16 +38,46 @@ async function api(path, options = {}) {
   return body;
 }
 
-// ---------- Preview: draws the clip's 320x170 billboard like the device does ----------
-const spriteCache = new Map();
-function spriteImage(name) {
-  if (!name) return null;
-  if (!spriteCache.has(name)) {
+// ---------- Preview: draws the clip's 320x170 screen like the device does ----------
+const imageCache = new Map();
+function loadImage(path) {
+  if (!path) return null;
+  if (!imageCache.has(path)) {
     const img = new Image();
-    img.src = `sprites/${name}.png`;
-    spriteCache.set(name, img);
+    img.src = path;
+    imageCache.set(path, img);
   }
-  return spriteCache.get(name);
+  const img = imageCache.get(path);
+  return img.complete && img.naturalWidth ? img : null;
+}
+
+// Magic 8 Ball answer triangle in assets/magic8/answer.png (same numbers as device/magic8.py).
+const M8 = { centerX: 160, top: 22, half: 96, apex: 153, textTop: 24, margin: 2, scale: 2, inkRows: 10 };
+const FONT_W = 6;  // the clip's built-in font cell, before scaling
+const FONT_H = 12;
+
+// Same wrapping as magic8.layout() on the clip: one text size, long answers wrap onto more lines.
+function magic8Layout(answer) {
+  const words = answer.replace("–", "-").split(/\s+/);
+  const lines = [];
+  let y = M8.textTop;
+  while (words.length) {
+    const bottom = y + M8.inkRows * M8.scale;
+    const half = (M8.half * (M8.apex - bottom)) / (M8.apex - M8.top) - M8.margin;
+    const limit = Math.floor((2 * half) / (FONT_W * M8.scale));
+    let line = words.shift();
+    while (words.length && line.length + 1 + words[0].length <= limit) line += ` ${words.shift()}`;
+    lines.push(line);
+    y += FONT_H * M8.scale;
+  }
+  return lines;
+}
+
+function drawPixelText(ctx, text, x, y, scale, color) {
+  ctx.fillStyle = color;
+  ctx.font = `bold ${Math.round(FONT_H * scale * 0.85)}px ui-monospace, Menlo, Consolas, monospace`;
+  ctx.textBaseline = "top";
+  [...text].forEach((char, i) => ctx.fillText(char, x + i * FONT_W * scale, y));
 }
 
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -66,7 +96,7 @@ class Preview {
   }
 
   set(screen) {
-    const key = screen ? `${screen.text}|${screen.bg}|${screen.sprite}|${screen.border}` : "";
+    const key = screen ? `${screen.text}|${screen.bg}|${screen.sprite}|${screen.border}|${screen.image}|${screen.answer}` : "";
     if (key === this.key) return;
     this.key = key;
     this.screen = screen;
@@ -77,7 +107,7 @@ class Preview {
     const dt = this.last ? Math.min((time - this.last) / 1000, 0.1) : 0;
     this.last = time;
     const screen = this.screen;
-    if (screen) {
+    if (screen?.text) {
       const width = screen.text.length * Preview.CHAR_W;
       if (reduceMotion.matches) {
         this.x = 8;
@@ -98,13 +128,24 @@ class Preview {
     ctx.fillRect(0, 0, 320, 170);
     if (!screen) return;
 
-    const img = spriteImage(screen.sprite);
-    if (img && img.complete && img.naturalWidth) ctx.drawImage(img, 100, 50, 120, 120);
+    // Full-screen artwork (Magic 8 Ball); falls back to a caption if the image is missing.
+    const art = loadImage(screen.image);
+    if (art) ctx.drawImage(art, 0, 0, 320, 170);
+    else if (screen.caption) drawPixelText(ctx, screen.caption, 160 - screen.caption.length * FONT_W, 73, 2, "#fff");
+    if (screen.answer) {
+      magic8Layout(screen.answer).forEach((line, i) =>
+        drawPixelText(ctx, line, M8.centerX - (line.length * FONT_W * M8.scale) / 2, M8.textTop + i * FONT_H * M8.scale, M8.scale, "#fff"));
+    }
 
-    ctx.fillStyle = "#111";
-    ctx.font = "bold 46px ui-monospace, Menlo, Consolas, monospace";
-    ctx.textBaseline = "top";
-    [...screen.text].forEach((char, i) => ctx.fillText(char, this.x + i * Preview.CHAR_W, 10));
+    const img = screen.sprite ? loadImage(`sprites/${screen.sprite}.png`) : null;
+    if (img) ctx.drawImage(img, 100, 50, 120, 120);
+
+    if (screen.text) {
+      ctx.fillStyle = "#111";
+      ctx.font = "bold 46px ui-monospace, Menlo, Consolas, monospace";
+      ctx.textBaseline = "top";
+      [...screen.text].forEach((char, i) => ctx.fillText(char, this.x + i * Preview.CHAR_W, 10));
+    }
 
     if (screen.border) {
       ctx.strokeStyle = "#111";
@@ -152,6 +193,12 @@ function shownScreen() {
   const reported = state.reported;
   const mode = reported?.mode ?? state.desired?.mode;
   if (mode === "spotify") return SPOTIFY_PLACEHOLDER;
+  if (mode === "magic8") {
+    const m8 = reported?.mode === "magic8" ? reported.magic8 : null;
+    return m8?.state === "answer" && m8.answer
+      ? { image: "magic8/answer.png", answer: m8.answer, bg: "#241C33" }
+      : { image: "magic8/idle.png", caption: "Ask a question...", bg: "#7B5CC4" };
+  }
   const moodId = reported?.mood ?? state.desired?.modes?.moods?.mood;
   return moodById(moodId) ?? null;
 }
@@ -176,7 +223,9 @@ function renderStatus() {
   const mode = modeById(reported?.mode);
   const mood = moodById(reported?.mood);
   $("#dash-mode").textContent = mode ? mode.name : "–";
-  $("#dash-mood").textContent = mood ? mood.text : "–";
+  const onMagic8 = reported?.mode === "magic8";
+  $("#dash-mood-label").textContent = onMagic8 ? "Answer" : "Mood";
+  $("#dash-mood").textContent = onMagic8 ? (reported.magic8?.answer ?? "No shake yet") : mood ? mood.text : "–";
   $("#dash-online").textContent = online ? "Online" : "Offline";
   $("#dash-sync").textContent = ago(reported?.last_seen);
   $("#dash-pending").hidden = !isPending();
@@ -190,6 +239,7 @@ function renderStatus() {
   dashPreview.set(shownScreen());
   renderModeTiles();
   renderMoodButtons();
+  renderModeCards();
 }
 
 function renderModeTiles() {
@@ -225,17 +275,47 @@ function renderScreenList() {
       grid.id = "mood-grid";
       card.append(grid);
     } else {
+      if (mode.id === "magic8") {
+        const latest = document.createElement("p");
+        latest.id = "magic8-latest";
+        latest.className = "latest";
+        card.append(latest);
+      }
       const button = document.createElement("button");
       button.className = "btn";
       button.type = "button";
-      button.disabled = true;
+      button.disabled = !ready;
       button.style.marginTop = "12px";
       button.textContent = "Show on clip";
+      if (ready) {
+        button.dataset.modeButton = mode.id;
+        button.addEventListener("click", () => sendCommand({ mode: mode.id }));
+      }
       card.append(button);
     }
     return card;
   }));
   renderMoodButtons();
+  renderModeCards();
+}
+
+// "Show on clip" buttons for ready modes other than Moods, plus Magic 8's latest answer.
+function renderModeCards() {
+  const reported = state.reported;
+  const queuedMode = isPending() ? state.desired?.mode : null;
+  document.querySelectorAll("[data-mode-button]").forEach((button) => {
+    const id = button.dataset.modeButton;
+    const onClip = reported?.mode === id;
+    button.textContent = onClip ? "On clip now" : queuedMode === id ? "Queued…" : "Show on clip";
+    button.setAttribute("aria-pressed", String(onClip));
+  });
+  const latest = $("#magic8-latest");
+  if (latest) {
+    const m8 = reported?.magic8;
+    latest.textContent = m8?.answer
+      ? `Latest answer: “${m8.answer}”${m8.count ? ` (shake #${m8.count})` : ""}`
+      : "No answer yet. Switch the clip to Magic 8 Ball and press its bottom button.";
+  }
 }
 
 function renderMoodButtons() {
@@ -267,12 +347,16 @@ function renderMoodButtons() {
 }
 
 // ---------- Actions ----------
-async function sendMood(moodId) {
+function sendMood(moodId) {
+  return sendCommand({ mode: "moods", mood: moodId });
+}
+
+async function sendCommand(command) {
   if (sendingMood) return;
-  sendingMood = moodId;
+  sendingMood = command.mood ?? command.mode;
   renderMoodButtons();
   try {
-    const { desired } = await api("/api/command", { method: "POST", body: JSON.stringify({ mode: "moods", mood: moodId }) });
+    const { desired } = await api("/api/command", { method: "POST", body: JSON.stringify(command) });
     state.desired = desired;
     toast(isOnline() ? "Sent. The clip updates within a few seconds." : "Saved. The clip will update when it's back online.");
   } catch (error) {
