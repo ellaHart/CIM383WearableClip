@@ -11,6 +11,7 @@ import os
 import time
 
 import board
+import digitalio
 import keypad
 import microcontroller
 
@@ -32,6 +33,13 @@ MOOD_BUTTON = microcontroller.pin.GPIO0     # BOOT
 SCREEN_BUTTON = microcontroller.pin.GPIO14  # IO14
 
 FPS = 18  # measured max is ~19 fps for the billboard at TEXT_SCALE 5
+BRIGHTNESS = 0.8  # backlight 0-1; lower uses less battery
+
+# Battery power: on the T-Display-S3, GPIO15 switches on the screen and battery power circuit.
+# Over USB the board works either way, but running from a battery needs it held HIGH
+# (as in LILYGO's own examples). Kept in a variable so it stays on for as long as code.py runs.
+power_on = digitalio.DigitalInOut(microcontroller.pin.GPIO15)
+power_on.switch_to_output(True)
 
 # Moods live in moods.json (shared with the website). Mood number = position in that list.
 # Edit text/colours there; "id" is how the website refers to a mood, so keep it stable.
@@ -101,6 +109,10 @@ keys = keypad.Keys((MOOD_BUTTON, SCREEN_BUTTON), value_when_pressed=False, pull=
 MOOD_KEY, SCREEN_KEY = 0, 1
 
 board.DISPLAY.auto_refresh = False
+try:
+    board.DISPLAY.brightness = BRIGHTNESS
+except (AttributeError, ValueError, RuntimeError):
+    pass  # backlight not adjustable on this build: stays at full brightness
 current = load_saved(NVM_SCREEN, len(SCREENS))
 show_screen(current)
 board.DISPLAY.refresh()
