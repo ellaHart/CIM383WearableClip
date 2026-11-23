@@ -14,6 +14,8 @@ import socketpool
 import wifi
 
 CONNECT_TIMEOUT = 10              # seconds per attempt (longest the display can pause)
+TX_POWER = 15                     # dBm (max 20). Lower = smaller current spikes on a small battery;
+                                  # plenty for a phone hotspot a few centimetres away.
 FIRST_ATTEMPT_DELAY = 3           # let the mood screen appear before the first try
 RETRY_DELAYS = (15, 30, 60, 120)  # seconds between failed attempts, then stays at the last
 HTTPS_TIMEOUT = 10
@@ -87,6 +89,7 @@ class WifiLink:
         started = time.monotonic()
         try:
             wifi.radio.enabled = True
+            wifi.radio.tx_power = TX_POWER
             if self.password:
                 wifi.radio.connect(self.ssid, self.password, timeout=CONNECT_TIMEOUT)
             else:
