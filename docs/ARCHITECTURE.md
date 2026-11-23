@@ -28,7 +28,7 @@ matter that an iPhone hotspot may block device-to-device traffic, and the websit
 | Tab | Contents | Status |
 |---|---|---|
 | **Dashboard** | Live 320×170 preview (grayscale, colour toggle), current screen + mood, online/offline, last sync, the five modes | Working |
-| **Screens** | Mood Screens (8 moods, tap to send); Spotify, Magic 8 Ball, Aquarium, Custom shown disabled with planned behaviour | Moods working |
+| **Screens** | Mood Expressions (8 moods, tap to send), Magic 8 Ball, Aquarium, Whiteboard (Show on clip); Spotify Now Playing shown disabled until it's built | Working |
 | **Create** | Message editor, background colour, live preview; image upload and "Send to clip" disabled | Preview only |
 | **Device** | Wi-Fi status, signal, IP, last sync; battery; button mapping; remember last screen; brightness; display on/off | Status working, controls placeholders |
 
@@ -37,7 +37,7 @@ Mood ids come from `device/moods.json`, the single source shared by the clip and
 (`npm run build` turns it into `web/lib/moods.generated.js`):
 `cheer, friendly, alert, love, sleepy, laptop, judging, eating`.
 
-**Modes**: `moods`, `magic8`, `aquarium`, `whiteboard` (ready); `spotify`, `custom` (planned).
+**Modes**: `moods`, `magic8`, `aquarium`, `whiteboard` (ready); `spotify` (planned).
 
 **Desired state** (what the website asks for):
 ```json
@@ -50,7 +50,7 @@ Mood ids come from `device/moods.json`, the single source shared by the clip and
     "spotify": {},
     "magic8": {},
     "aquarium": {},
-    "custom": { "text": "", "bg": "#FFFFFF", "image": null }
+    "whiteboard": { "rev": 0 }
   }
 }
 ```
