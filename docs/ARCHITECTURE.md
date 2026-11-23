@@ -111,6 +111,20 @@ refresh (every 3 s while the page is open) is one call and two commands. With th
 that's ~90K calls and ~180K Redis commands a month, within Vercel Hobby and Upstash's free
 500K commands/month. Leaving the clip on around the clock would use ~520K of each.
 
+## Clip storage (NVM) and time
+`microcontroller.nvm` survives power-off. Layout:
+
+| Bytes | Used by | Contents |
+|---|---|---|
+| 0 | `code.py` | current mood |
+| 1 | `code.py` | current screen |
+| 2-5 | `cloud_sync.py` | last applied website command version |
+| 16-102 | `aquarium.py` | saved fish: magic `0xA9`, count, then per fish species index + expiry Unix time |
+
+The aquarium only writes when a fish is born, expires or gets dated, and only if the bytes changed.
+Real-world time comes from the `Date` header of the API's replies (`clock.py`); after a restart it is
+unknown until the first successful check-in, so saved fish reappear then (expired ones don't).
+
 ## Clip behaviour
 - `cloud_sync.py` checks in every 5 s while Wi-Fi is up, and right away after a button press or an
   applied command. A request can pause the display for at most 5 s (usually ~0.2 s).

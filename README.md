@@ -27,7 +27,7 @@ Pass `-Drive E:` if CIRCUITPY shows up as a different letter. Don't edit files d
 
 **Aquarium art:** `assets/aquarium/background.jpg` (any size; scaled to fill 320×170, cropping evenly, and saved as a smooth 16-bit image) plus `clownfish.png`, `blue_tang.png` and `betta.png` spritesheets (8 frames in a row, facing right, transparent background). The same command converts them to `device/aquarium/`. Speeds, depths and frame sizes live in `SPECIES` in `device/aquarium.py`.
 
-**Buttons:** BOOT (bottom) = next mood on Moods, shake on Magic 8 Ball, otherwise back to Moods; IO14 (top) = next screen (Moods → Spotify → Magic 8 Ball → Aquarium). On the Aquarium the bottom button does nothing yet (it's reserved for feeding). The current mood and screen are remembered after a restart. Swap `MOOD_BUTTON`/`SCREEN_BUTTON` in `device/code.py` if they feel backwards.
+**Buttons:** BOOT (bottom) = next mood on Moods, shake on Magic 8 Ball, otherwise back to Moods; IO14 (top) = next screen (Moods → Spotify → Magic 8 Ball → Aquarium). On the Aquarium the bottom button drops food: the nearest fish eats it and a new random fish appears (up to 20). The three original fish are permanent; new ones live 5 minutes each and are remembered across restarts once the clip has had Wi-Fi (it learns the real time from the website's replies). The current mood and screen are remembered after a restart. Swap `MOOD_BUTTON`/`SCREEN_BUTTON` in `device/code.py` if they feel backwards.
 
 **Adding a screen:** write a class with `name`, `show()` and `tick()` in `device/code.py` and add it to `SCREENS`. `device/billboard.py` draws the scrolling-text-plus-sprite layout any screen can reuse.
 

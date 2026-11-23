@@ -16,6 +16,8 @@ import microcontroller
 import socketpool
 import wifi
 
+import clock
+
 SYNC_INTERVAL = 5                # seconds between check-ins while things work
 REQUEST_TIMEOUT = 5              # seconds; longest a single sync can pause the display
 ERROR_DELAYS = (10, 20, 40, 60)  # seconds between attempts after failures
@@ -43,6 +45,7 @@ class HttpsConnection:
         self.context = None
         self.sock = None
         self.buffer = b""
+        self.last_date = None  # "Date" header of the latest response (server's real-world time)
 
     def close(self):
         if self.sock:
@@ -133,6 +136,7 @@ class HttpsConnection:
                     data = self._read_chunked()
                 else:
                     raise OSError("response without a length")
+                self.last_date = response_headers.get("date")
                 if response_headers.get("connection", "").lower() == "close":
                     self.close()
                 return status, data
@@ -220,6 +224,7 @@ class CloudSync:
             "POST", "/api/device/sync", json.dumps(report).encode(),
             {"Authorization": "Bearer " + self.token, "Content-Type": "application/json"},
         )
+        clock.set_from_http_date(self.connection.last_date)  # real-world time for the aquarium
         if status == 401:
             raise RuntimeError("server rejected MOODCLIP_DEVICE_TOKEN")
         if status != 200:
