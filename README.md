@@ -31,6 +31,8 @@ Pass `-Drive E:` if CIRCUITPY shows up as a different letter. Don't edit files d
 
 **Whiteboard:** draw on the website's Draw tab and press *Send to Clip*; the clip switches to the Whiteboard screen and shows it. Format and sync are described in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#whiteboard-drawings).
 
+**Spotify Now Playing:** shows the song you're playing on Spotify (display only). Needs a Spotify developer app owned by a Premium account and two Vercel environment variables; see [docs/SPOTIFY.md](docs/SPOTIFY.md).
+
 **Adding a screen:** write a class with `name`, `show()` and `tick()` in `device/code.py` and add it to `SCREENS`. `device/billboard.py` draws the scrolling-text-plus-sprite layout any screen can reuse.
 
 **Wi-Fi (phone hotspot):** open `D:\settings.toml` on the board and add the two lines from `settings.example.toml` with your real hotspot name and password. That file stays on the board only: it's in `.gitignore`, and `deploy.ps1` never touches it. The hotspot must be 2.4 GHz (iPhone: turn on *Maximize Compatibility*). `device/wifi_link.py` connects in the background of the display loop, runs one HTTPS test, and prints `Wi-Fi:` / `HTTPS:` lines to the serial console. Without Wi-Fi, the moods and buttons work as usual.

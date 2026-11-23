@@ -28,7 +28,7 @@ matter that an iPhone hotspot may block device-to-device traffic, and the websit
 | Tab | Contents | Status |
 |---|---|---|
 | **Dashboard** | Live 320×170 preview (grayscale, colour toggle), current screen + mood, online/offline, last sync, the five modes | Working |
-| **Screens** | Mood Expressions (8 moods, tap to send), Magic 8 Ball, Aquarium, Whiteboard (Show on clip); Spotify Now Playing shown disabled until it's built | Working |
+| **Screens** | Mood Expressions (8 moods, tap to send), Magic 8 Ball, Aquarium, Whiteboard, Spotify Now Playing (Connect/Disconnect, current song); each has Show on clip | Working |
 | **Create** | Message editor, background colour, live preview; image upload and "Send to clip" disabled | Preview only |
 | **Device** | Wi-Fi status, signal, IP, last sync; battery; button mapping; remember last screen; brightness; display on/off | Status working, controls placeholders |
 
@@ -37,7 +37,7 @@ Mood ids come from `device/moods.json`, the single source shared by the clip and
 (`npm run build` turns it into `web/lib/moods.generated.js`):
 `cheer, friendly, alert, love, sleepy, laptop, judging, eating`.
 
-**Modes**: `moods`, `magic8`, `aquarium`, `whiteboard` (ready); `spotify` (planned).
+**Modes**: `moods`, `magic8`, `aquarium`, `whiteboard`, `spotify` (all ready).
 
 **Desired state** (what the website asks for):
 ```json
@@ -77,6 +77,9 @@ then "On clip".
 | `POST /api/drawing` | `Bearer CONTROL_TOKEN` | Whiteboard upload: raw 6800-byte body (below). Saves it with a new revision and switches the clip to `whiteboard` (normal versioned command). Wrong size → 400/413. |
 | `GET /api/drawing` | `Bearer CONTROL_TOKEN` | Latest drawing as raw bytes (`x-drawing-rev` header), for the dashboard preview |
 | `GET /api/device/drawing` | `Bearer DEVICE_TOKEN` | Same bytes for the clip |
+| `POST /api/spotify/login` | `Bearer CONTROL_TOKEN` | Spotify sign-in URL with a one-time `state` ([docs/SPOTIFY.md](SPOTIFY.md)) |
+| `GET /api/spotify/callback` | one-time `state` | Spotify sends the browser back here; stores the refresh token in Redis |
+| `POST /api/spotify/disconnect` | `Bearer CONTROL_TOKEN` | Deletes the stored Spotify tokens |
 
 ## Environment variables
 | Name | Where it comes from | Who uses it |

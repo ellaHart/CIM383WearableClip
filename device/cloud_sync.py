@@ -154,13 +154,15 @@ def _host_from_url(url):
 
 
 class CloudSync:
-    def __init__(self, wifi_link, get_status, apply_command, apply_drawing=None):
+    def __init__(self, wifi_link, get_status, apply_command, apply_drawing=None, on_reply=None):
         """get_status() -> {"mode": ..., "mood": ...}; apply_command(dict) -> True if applied;
-        apply_drawing(rev, data) -> True if a downloaded whiteboard drawing was accepted."""
+        apply_drawing(rev, data) -> True if a downloaded whiteboard drawing was accepted;
+        on_reply(dict) is called with every check-in reply (e.g. Spotify song info)."""
         self.wifi_link = wifi_link
         self.get_status = get_status
         self.apply_command = apply_command
         self.apply_drawing = apply_drawing
+        self.on_reply = on_reply
         self.drawing_rev = 0  # whiteboard drawing we have (RAM only: re-downloaded after a restart)
         self.failures = 0
         self.next_sync = 0
@@ -238,6 +240,9 @@ class CloudSync:
             self.synced_once = True
             print("Cloud: connected; latest command v{}, clip has applied v{}".format(
                 command["version"], self.applied_version))
+
+        if self.on_reply:
+            self.on_reply(command)
 
         # A new whiteboard drawing? Download it (once per revision) before applying the command,
         # so switching to the whiteboard shows the new drawing straight away.
