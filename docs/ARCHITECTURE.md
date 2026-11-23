@@ -37,7 +37,7 @@ Mood ids come from `device/moods.json`, the single source shared by the clip and
 (`npm run build` turns it into `web/lib/moods.generated.js`):
 `cheer, friendly, alert, love, sleepy, laptop, judging, eating`.
 
-**Modes**: `moods`, `magic8`, `aquarium` (ready); `spotify`, `custom` (planned).
+**Modes**: `moods`, `magic8`, `aquarium`, `whiteboard` (ready); `spotify`, `custom` (planned).
 
 **Desired state** (what the website asks for):
 ```json
@@ -74,6 +74,9 @@ then "On clip".
 | `GET /api/state` | `Bearer CONTROL_TOKEN` | `{ desired, reported }` |
 | `POST /api/command` | `Bearer CONTROL_TOKEN` | `{ "mode": "moods", "mood": "love" }` → bumps version. Planned modes return 409. |
 | `POST /api/device/sync` | `Bearer DEVICE_TOKEN` | Clip sends its reported state, gets `{ version, mode, mood }` back |
+| `POST /api/drawing` | `Bearer CONTROL_TOKEN` | Whiteboard upload: raw 6800-byte body (below). Saves it with a new revision and switches the clip to `whiteboard` (normal versioned command). Wrong size → 400/413. |
+| `GET /api/drawing` | `Bearer CONTROL_TOKEN` | Latest drawing as raw bytes (`x-drawing-rev` header), for the dashboard preview |
+| `GET /api/device/drawing` | `Bearer DEVICE_TOKEN` | Same bytes for the clip |
 
 ## Environment variables
 | Name | Where it comes from | Who uses it |
@@ -110,6 +113,21 @@ silently forgetting state.
 refresh (every 3 s while the page is open) is one call and two commands. With the clip on ~4 h/day
 that's ~90K calls and ~180K Redis commands a month, within Vercel Hobby and Upstash's free
 500K commands/month. Leaving the clip on around the clock would use ~520K of each.
+
+## Whiteboard drawings
+Format (shared by `web/public/app.js`, `web/lib/core.js` and `device/whiteboard.py`):
+320×170 pixels, 1 bit per pixel, **1 = black, 0 = white**; rows top to bottom, **40 bytes per row**;
+in each byte the **leftmost pixel is the most significant bit**. Exactly **6800 bytes**.
+
+1. The website snaps the canvas to pure black/white, packs it into those 6800 bytes and POSTs them raw.
+2. The API stores `{ rev, data: base64 }` under `moodclip:drawing` (only the latest), bumps
+   `moodclip:drawing_rev`, and sets the desired mode to `whiteboard` with `modes.whiteboard.rev`.
+3. The clip's normal check-in reply carries `drawing: rev`; the clip downloads
+   `/api/device/drawing` only when that revision differs from the one it has, decodes it with
+   `bitmaptools.readinto(..., 1, reverse_pixels_in_element=True)` into a 1-bit Bitmap (~20 ms), and
+   reports `drawing_rev`. The website says "Showing on the clip" only once the clip reports that
+   revision on its whiteboard screen. Drawings live in RAM only (no flash writes); after a restart
+   the clip downloads the latest one again.
 
 ## Clip storage (NVM) and time
 `microcontroller.nvm` survives power-off. Layout:

@@ -2,7 +2,7 @@
 #
 # Buttons:  MOOD button   = bottom button: next mood on the Moods screen, the screen's own
 #                           action where it has one (Magic 8 Ball: shake), else back to Moods
-#           SCREEN button = top button: next screen (Moods -> Spotify -> Magic 8 Ball -> Aquarium)
+#           SCREEN button = top button: next screen (Moods -> Spotify -> Magic 8 Ball -> Aquarium -> Whiteboard)
 # The current mood and screen are saved in non-volatile memory, so they survive restarts.
 # Wi-Fi (wifi_link.py) and remote control (cloud_sync.py) are optional:
 # everything above keeps working without them.
@@ -17,6 +17,7 @@ import microcontroller
 from billboard import Billboard
 from aquarium import AquariumScreen
 from magic8 import Magic8Screen
+from whiteboard import WhiteboardScreen
 
 try:
     from wifi_link import WifiLink
@@ -96,7 +97,8 @@ class SpotifyScreen:
 
 mood_screen = MoodScreen()
 magic8_screen = Magic8Screen()
-SCREENS = (mood_screen, SpotifyScreen(), magic8_screen, AquariumScreen())  # new screens go at the end (NVM index)
+whiteboard_screen = WhiteboardScreen()
+SCREENS = (mood_screen, SpotifyScreen(), magic8_screen, AquariumScreen(), whiteboard_screen)  # new screens go at the end (NVM index)
 
 
 def show_screen(index):
@@ -117,7 +119,8 @@ board.DISPLAY.refresh()
 
 # --- Remote control (website -> API -> clip) ---
 def current_status():
-    status = {"mode": SCREENS[current].id, "mood": STATES[mood_screen.index]["id"]}
+    status = {"mode": SCREENS[current].id, "mood": STATES[mood_screen.index]["id"],
+              "drawing_rev": whiteboard_screen.rev}
     if magic8_screen.last_answer or SCREENS[current] is magic8_screen:
         status["magic8"] = {"state": magic8_screen.state, "answer": magic8_screen.last_answer,
                             "count": magic8_screen.count}
@@ -146,7 +149,17 @@ def apply_remote(command):
 
 cloud_configured = bool(os.getenv("MOODCLIP_API_URL"))
 wifi_link = WifiLink(https_test=not cloud_configured) if WifiLink else None
-cloud = CloudSync(wifi_link, current_status, apply_remote) if wifi_link and wifi_link.ssid else None
+def apply_drawing(rev, data):
+    """A new whiteboard drawing arrived; redraw now if the whiteboard is on screen."""
+    if not whiteboard_screen.set_drawing(rev, data):
+        return False
+    if SCREENS[current] is whiteboard_screen:
+        whiteboard_screen.show()  # swaps the placeholder for the drawing on the first one
+    return True
+
+
+cloud = (CloudSync(wifi_link, current_status, apply_remote, apply_drawing)
+         if wifi_link and wifi_link.ssid else None)
 
 frame_time = 1 / FPS
 while True:

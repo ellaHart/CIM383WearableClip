@@ -26,6 +26,8 @@ const ROUTES = {
   "/api/state": "api/state.js",
   "/api/command": "api/command.js",
   "/api/device/sync": "api/device/sync.js",
+  "/api/drawing": "api/drawing.js",
+  "/api/device/drawing": "api/device/drawing.js",
 };
 const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".json": "application/json" };
 

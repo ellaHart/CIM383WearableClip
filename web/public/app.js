@@ -103,7 +103,7 @@ class Preview {
   }
 
   set(screen) {
-    const key = screen ? `${screen.text}|${screen.bg}|${screen.sprite}|${screen.border}|${screen.image}|${screen.answer}|${Boolean(screen.fish)}` : "";
+    const key = screen ? `${screen.text}|${screen.bg}|${screen.sprite}|${screen.border}|${screen.image}|${screen.answer}|${Boolean(screen.fish)}|${screen.board}` : "";
     if (key === this.key) return;
     this.key = key;
     this.screen = screen;
@@ -153,6 +153,12 @@ class Preview {
       if (fish.flip) { ctx.translate(fish.x * 2 + fish.w, 0); ctx.scale(-1, 1); }
       ctx.drawImage(sheet, 0, 0, fish.w, fish.h, fish.x, fish.y, fish.w, fish.h);
       ctx.restore();
+    }
+    if (screen.board !== undefined) {
+      const drawing = previewDrawing(screen.board);
+      if (drawing) ctx.drawImage(drawing, 0, 0);
+      else ["Draw something", "on your phone!"].forEach((line, i) =>
+        drawPixelText(ctx, line, 160 - line.length * FONT_W, 61 + i * 26, 2, "#111"));
     }
     if (screen.answer) {
       magic8Layout(screen.answer).forEach((line, i) =>
@@ -215,6 +221,7 @@ function shownScreen() {
   const reported = state.reported;
   const mode = reported?.mode ?? state.desired?.mode;
   if (mode === "spotify") return SPOTIFY_PLACEHOLDER;
+  if (mode === "whiteboard") return { board: reported?.drawing_rev || state.desired?.modes?.whiteboard?.rev || 0, bg: "#fff" };
   if (mode === "aquarium") return { image: "aquarium/background.jpg", cover: true, fish: AQUARIUM_FISH, bg: "#2E8FC0" };
   if (mode === "magic8") {
     const m8 = reported?.mode === "magic8" ? reported.magic8 : null;
@@ -263,6 +270,7 @@ function renderStatus() {
   renderModeTiles();
   renderMoodButtons();
   renderModeCards();
+  updateBoardStatus();
 }
 
 function renderModeTiles() {
@@ -473,8 +481,201 @@ function applyColour(on) {
 document.querySelectorAll("[data-colour-toggle]").forEach((box) =>
   box.addEventListener("change", () => applyColour(box.checked)));
 
+// ---------- Whiteboard ----------
+// The canvas is exactly the clip's 320x170 pixels (scaled up with CSS, pixelated), so what you see
+// is what the clip shows. After each stroke the canvas is snapped to pure black and white.
+//
+// Upload format (must match device/whiteboard.py): 320x170, 1 bit per pixel, 1 = black.
+// Rows top to bottom, 40 bytes per row; in each byte the leftmost pixel is the most significant bit.
+const BOARD_W = 320;
+const BOARD_H = 170;
+const BOARD_BYTES = (BOARD_W / 8) * BOARD_H; // 6800
+const BOARD_TOOLS = { pen: { color: "#000", width: 3 }, eraser: { color: "#fff", width: 10 } };
+
+const board = $("#board");
+const boardCtx = board.getContext("2d", { willReadFrequently: true });
+let boardTool = "pen";
+let boardPointer = null;
+let boardLast = null;
+let boardSending = false;
+let boardWaitingFor = null; // drawing revision we're waiting for the clip to show
+
+function setBoardStatus(text, done = false) {
+  const el = $("#board-status");
+  el.textContent = text;
+  el.classList.toggle("is-done", done);
+}
+
+function clearBoard() {
+  boardCtx.fillStyle = "#fff";
+  boardCtx.fillRect(0, 0, BOARD_W, BOARD_H);
+}
+
+function boardPoint(event) {
+  const rect = board.getBoundingClientRect(); // CSS size can be anything; map back to 320x170
+  return {
+    x: ((event.clientX - rect.left) * BOARD_W) / rect.width,
+    y: ((event.clientY - rect.top) * BOARD_H) / rect.height,
+  };
+}
+
+function boardStroke(from, to) {
+  const { color, width } = BOARD_TOOLS[boardTool];
+  boardCtx.strokeStyle = color;
+  boardCtx.lineWidth = width;
+  boardCtx.lineCap = "round";
+  boardCtx.lineJoin = "round";
+  boardCtx.beginPath();
+  boardCtx.moveTo(from.x, from.y);
+  boardCtx.lineTo(to.x, to.y);
+  boardCtx.stroke();
+}
+
+function boardDot(point) {
+  const { color, width } = BOARD_TOOLS[boardTool];
+  boardCtx.fillStyle = color;
+  boardCtx.beginPath();
+  boardCtx.arc(point.x, point.y, width / 2, 0, Math.PI * 2);
+  boardCtx.fill();
+}
+
+// Snap anti-aliased edges to pure black/white, exactly as the clip will show them.
+function snapBoard() {
+  const image = boardCtx.getImageData(0, 0, BOARD_W, BOARD_H);
+  const px = image.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const value = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114 < 128 ? 0 : 255;
+    px[i] = px[i + 1] = px[i + 2] = value;
+    px[i + 3] = 255;
+  }
+  boardCtx.putImageData(image, 0, 0);
+}
+
+function encodeBoard() {
+  const px = boardCtx.getImageData(0, 0, BOARD_W, BOARD_H).data;
+  const bytes = new Uint8Array(BOARD_BYTES);
+  for (let y = 0; y < BOARD_H; y++) {
+    for (let x = 0; x < BOARD_W; x++) {
+      if (px[(y * BOARD_W + x) * 4] < 128) bytes[y * (BOARD_W / 8) + (x >> 3)] |= 0x80 >> (x & 7);
+    }
+  }
+  return bytes;
+}
+
+function decodeBoard(bytes) {
+  const canvas = document.createElement("canvas");
+  canvas.width = BOARD_W;
+  canvas.height = BOARD_H;
+  const ctx = canvas.getContext("2d");
+  const image = ctx.createImageData(BOARD_W, BOARD_H);
+  for (let y = 0; y < BOARD_H; y++) {
+    for (let x = 0; x < BOARD_W; x++) {
+      const black = bytes[y * (BOARD_W / 8) + (x >> 3)] & (0x80 >> (x & 7));
+      const i = (y * BOARD_W + x) * 4;
+      image.data[i] = image.data[i + 1] = image.data[i + 2] = black ? 0 : 255;
+      image.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  return canvas;
+}
+
+// Latest drawing for the dashboard preview, fetched once per revision.
+const previewCache = { rev: 0, canvas: null, loading: false };
+function previewDrawing(rev) {
+  if (!rev) return null;
+  if (rev !== previewCache.rev && !previewCache.loading) {
+    previewCache.loading = true;
+    fetch("/api/drawing", { headers: { authorization: `Bearer ${token}` } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`drawing ${response.status}`);
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.length !== BOARD_BYTES) throw new Error("bad drawing size");
+        previewCache.canvas = decodeBoard(bytes);
+        previewCache.rev = Number(response.headers.get("x-drawing-rev")) || rev;
+      })
+      .catch((error) => console.warn(error))
+      .finally(() => { previewCache.loading = false; });
+  }
+  return previewCache.canvas;
+}
+
+board.addEventListener("pointerdown", (event) => {
+  if (boardPointer !== null) return; // one finger at a time
+  event.preventDefault();
+  board.setPointerCapture(event.pointerId);
+  boardPointer = event.pointerId;
+  boardLast = boardPoint(event);
+  boardDot(boardLast); // a tap makes a dot (browsers skip zero-length strokes)
+});
+board.addEventListener("pointermove", (event) => {
+  if (event.pointerId !== boardPointer) return;
+  event.preventDefault();
+  for (const point of event.getCoalescedEvents?.() ?? [event]) { // every sample, for smooth lines
+    const next = boardPoint(point);
+    boardStroke(boardLast, next);
+    boardLast = next;
+  }
+});
+function endStroke(event) {
+  if (event.pointerId !== boardPointer) return;
+  boardPointer = null;
+  snapBoard();
+}
+board.addEventListener("pointerup", endStroke);
+board.addEventListener("pointercancel", endStroke);
+
+document.querySelectorAll("[data-tool]").forEach((button) =>
+  button.addEventListener("click", () => {
+    boardTool = button.dataset.tool;
+    document.querySelectorAll("[data-tool]").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+  }));
+$("#board-clear").addEventListener("click", () => {
+  clearBoard();
+  setBoardStatus("Cleared. Nothing changes on the clip until you send.");
+});
+
+$("#board-send").addEventListener("click", async () => {
+  if (boardSending) return;
+  boardSending = true;
+  const button = $("#board-send");
+  button.disabled = true;
+  button.textContent = "Sending…";
+  setBoardStatus("Sending your drawing…");
+  try {
+    const { rev, desired } = await api("/api/drawing", {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream" },
+      body: encodeBoard(),
+    });
+    state.desired = desired;
+    boardWaitingFor = rev;
+    setBoardStatus(isOnline()
+      ? "Sent! Waiting for the clip to show it…"
+      : "Saved. It'll appear when the clip is back online.");
+  } catch (error) {
+    if (error instanceof AuthError) return handleError(error);
+    setBoardStatus(`Couldn't send (${error.message}). Your drawing is still here, so try again.`);
+  } finally {
+    boardSending = false;
+    button.disabled = false;
+    button.textContent = "Send to Clip";
+  }
+});
+
+// Only claim it's on the clip once the clip reports this drawing on its whiteboard screen.
+function updateBoardStatus() {
+  const reported = state.reported;
+  if (boardWaitingFor && reported?.mode === "whiteboard" && (reported.drawing_rev ?? 0) >= boardWaitingFor) {
+    boardWaitingFor = null;
+    setBoardStatus("✓ Showing on the clip", true);
+  }
+}
+
+clearBoard();
+
 // ---------- Routing ----------
-const VIEWS = ["dashboard", "screens", "create", "settings"];
+const VIEWS = ["dashboard", "screens", "draw", "create", "settings"];
 function route() {
   const view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "dashboard";
   document.querySelectorAll("[data-view]").forEach((el) => { el.hidden = el.id !== view; });

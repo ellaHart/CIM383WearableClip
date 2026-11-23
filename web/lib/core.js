@@ -8,12 +8,13 @@
 import { Redis } from "@upstash/redis";
 import MOODS from "./moods.generated.js"; // copied from device/moods.json by scripts/sync-assets.mjs
 
-// The five screen modes. "ready" = selectable now; the rest are shown as placeholders.
+// The screen modes. "ready" = selectable now; the rest are shown as placeholders.
 export const MODES = [
   { id: "moods", name: "Mood Screens", status: "ready", summary: "Pixel-art moods with scrolling text." },
   { id: "spotify", name: "Spotify Now Playing", status: "planned", summary: "Current song, artist and album art." },
   { id: "magic8", name: "Magic 8 Ball", status: "ready", summary: "Press the clip's bottom button to shake it for an answer." },
-  { id: "aquarium", name: "Little Aquarium", status: "ready", summary: "A clownfish, a blue tang and a betta swim around. Feeding is coming soon." },
+  { id: "aquarium", name: "Little Aquarium", status: "ready", summary: "A clownfish, a blue tang and a betta swim around. Press the clip's bottom button to feed them." },
+  { id: "whiteboard", name: "Whiteboard", status: "ready", summary: "Draw on your phone and send it to the clip." },
   { id: "custom", name: "Custom Text / Photo", status: "planned", summary: "Your own message, background and image." },
 ];
 const MODE_IDS = new Set(MODES.map((mode) => mode.id));
@@ -31,11 +32,23 @@ const DEFAULT_DESIRED = {
     spotify: {},
     magic8: {},
     aquarium: {},
+    whiteboard: { rev: 0 },  // revision of the latest drawing (KEYS.drawing)
     custom: { text: "", bg: "#FFFFFF", image: null },
   },
 };
 
-const KEYS = { desired: "moodclip:desired", reported: "moodclip:reported", version: "moodclip:version" };
+// Whiteboard drawings: 320x170, 1 bit per pixel, 1 = black. Rows top to bottom, 40 bytes each;
+// within a byte the leftmost pixel is the most significant bit. 6800 bytes in total.
+// Stored in Redis as { rev, data: base64 } (only the latest drawing is kept).
+export const DRAWING = { width: 320, height: 170, bytes: (320 / 8) * 170 };
+
+const KEYS = {
+  desired: "moodclip:desired",
+  reported: "moodclip:reported",
+  version: "moodclip:version",
+  drawing: "moodclip:drawing",
+  drawingRev: "moodclip:drawing_rev",
+};
 
 // ---------- Storage: Upstash Redis on Vercel, in-memory for the local test server ----------
 const memory = new Map();
@@ -124,7 +137,12 @@ function endpoint(tokenName, handler) {
 
 // Small payload for the clip: only what it needs to act on.
 function deviceView(desired) {
-  return { version: desired.version, mode: desired.mode, mood: desired.modes.moods.mood };
+  return {
+    version: desired.version,
+    mode: desired.mode,
+    mood: desired.modes.moods.mood,
+    drawing: desired.modes.whiteboard?.rev ?? 0, // the clip downloads the drawing only when this changes
+  };
 }
 
 // Keep only known, small fields from the clip's report.
@@ -144,6 +162,7 @@ function cleanReport(body) {
         }
       : null,
     applied_version: pick(body.applied_version, "number"),
+    drawing_rev: pick(body.drawing_rev, "number"), // whiteboard drawing the clip has (0 = none yet)
     rssi: pick(body.rssi, "number"),
     ip: pick(body.ip, "string", 40),
     uptime: pick(body.uptime, "number"),
@@ -182,4 +201,57 @@ export const postDeviceSync = endpoint("DEVICE_TOKEN", async (request) => {
   await db.set(KEYS.reported, { ...cleanReport(body), last_seen: new Date().toISOString() });
   const { desired } = await readState();
   return json(deviceView(desired));
+});
+
+// ---------- Whiteboard ----------
+function binary(bytes, rev) {
+  return new Response(bytes, {
+    headers: {
+      "content-type": "application/octet-stream",
+      "content-length": String(bytes.length),
+      "cache-control": "no-store",
+      "x-drawing-rev": String(rev),
+    },
+  });
+}
+
+async function readDrawing() {
+  const saved = await getStore().get(KEYS.drawing);
+  if (!saved?.data) return null;
+  return { rev: saved.rev, bytes: Uint8Array.from(Buffer.from(saved.data, "base64")) };
+}
+
+// Website uploads a drawing (raw 6800-byte body). It becomes the latest drawing, and the clip is
+// switched to the whiteboard through the normal versioned command.
+export const postDrawing = endpoint("CONTROL_TOKEN", async (request) => {
+  const declared = Number(request.headers.get("content-length"));
+  if (declared && declared !== DRAWING.bytes) return error(413, `A drawing must be exactly ${DRAWING.bytes} bytes`);
+  const body = new Uint8Array(await request.arrayBuffer());
+  if (body.length !== DRAWING.bytes) return error(400, `A drawing must be exactly ${DRAWING.bytes} bytes`);
+
+  const db = getStore();
+  const rev = await db.incr(KEYS.drawingRev);
+  await db.set(KEYS.drawing, { rev, data: Buffer.from(body).toString("base64") });
+
+  const version = await db.incr(KEYS.version);
+  const { desired } = await readState();
+  const next = structuredClone(desired);
+  next.mode = "whiteboard";
+  next.modes.whiteboard = { rev };
+  next.version = version;
+  next.updated_at = new Date().toISOString();
+  await db.set(KEYS.desired, next);
+  return json({ rev, desired: next });
+});
+
+// Website reads the latest drawing back (for the dashboard preview).
+export const getDrawing = endpoint("CONTROL_TOKEN", async () => {
+  const drawing = await readDrawing();
+  return drawing ? binary(drawing.bytes, drawing.rev) : error(404, "No drawing yet");
+});
+
+// Clip downloads the latest drawing (raw bytes, revision in the x-drawing-rev header).
+export const getDeviceDrawing = endpoint("DEVICE_TOKEN", async () => {
+  const drawing = await readDrawing();
+  return drawing ? binary(drawing.bytes, drawing.rev) : error(404, "No drawing yet");
 });
