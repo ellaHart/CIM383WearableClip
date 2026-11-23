@@ -10,12 +10,11 @@ import MOODS from "./moods.generated.js"; // copied from device/moods.json by sc
 
 // The screen modes. "ready" = selectable now; the rest are shown as placeholders.
 export const MODES = [
-  { id: "moods", name: "Mood Screens", status: "ready", summary: "Pixel-art moods with scrolling text." },
-  { id: "spotify", name: "Spotify Now Playing", status: "planned", summary: "Current song, artist and album art." },
+  { id: "moods", name: "Mood Expressions", status: "ready", summary: "Pixel-art moods with scrolling text." },
   { id: "magic8", name: "Magic 8 Ball", status: "ready", summary: "Press the clip's bottom button to shake it for an answer." },
-  { id: "aquarium", name: "Little Aquarium", status: "ready", summary: "A clownfish, a blue tang and a betta swim around. Press the clip's bottom button to feed them." },
+  { id: "aquarium", name: "Aquarium", status: "ready", summary: "A clownfish, a blue tang and a betta swim around. Press the clip's bottom button to feed them." },
   { id: "whiteboard", name: "Whiteboard", status: "ready", summary: "Draw on your phone and send it to the clip." },
-  { id: "custom", name: "Custom Text / Photo", status: "planned", summary: "Your own message, background and image." },
+  { id: "spotify", name: "Spotify Now Playing", status: "planned", summary: "Current song, artist and album art." },
 ];
 const MODE_IDS = new Set(MODES.map((mode) => mode.id));
 const MOOD_IDS = new Set(MOODS.map((mood) => mood.id));
@@ -33,7 +32,6 @@ const DEFAULT_DESIRED = {
     magic8: {},
     aquarium: {},
     whiteboard: { rev: 0 },  // revision of the latest drawing (KEYS.drawing)
-    custom: { text: "", bg: "#FFFFFF", image: null },
   },
 };
 
