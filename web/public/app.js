@@ -3,7 +3,6 @@ const TOKEN_KEY = "moodclip.controlCode";
 const COLOUR_KEY = "moodclip.colour";
 const POLL_MS = 3000;
 const ONLINE_WINDOW_MS = 20000; // the clip syncs every ~5 s, so 20 s of silence = offline
-const SPOTIFY_PLACEHOLDER = { text: "Spotify not connected yet", bg: "#93BA9B", sprite: "music" };
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -103,7 +102,7 @@ class Preview {
   }
 
   set(screen) {
-    const key = screen ? `${screen.text}|${screen.bg}|${screen.sprite}|${screen.border}|${screen.image}|${screen.answer}|${Boolean(screen.fish)}|${screen.board}` : "";
+    const key = screen ? `${JSON.stringify(screen.nowPlaying ?? "")}|${screen.text}|${screen.bg}|${screen.sprite}|${screen.border}|${screen.image}|${screen.answer}|${Boolean(screen.fish)}|${screen.board}` : "";
     if (key === this.key) return;
     this.key = key;
     this.screen = screen;
@@ -153,6 +152,13 @@ class Preview {
       if (fish.flip) { ctx.translate(fish.x * 2 + fish.w, 0); ctx.scale(-1, 1); }
       ctx.drawImage(sheet, 0, 0, fish.w, fish.h, fish.x, fish.y, fish.w, fish.h);
       ctx.restore();
+    }
+    if (screen.nowPlaying) {
+      // Same layout as device/spotify.py: label, big title, artist (cut off here; it scrolls on the clip).
+      const { label, title, artist } = screen.nowPlaying;
+      drawPixelText(ctx, label, 12, 12, 2, "#1DB954");
+      if (title) drawPixelText(ctx, title.slice(0, 16), 12, 60, 3, "#fff");
+      if (artist) drawPixelText(ctx, artist.slice(0, 25), 12, 112, 2, "#b3b3b3");
     }
     if (screen.board !== undefined) {
       const drawing = previewDrawing(screen.board);
@@ -219,7 +225,11 @@ function isPending() {
 function shownScreen() {
   const reported = state.reported;
   const mode = reported?.mode ?? state.desired?.mode;
-  if (mode === "spotify") return SPOTIFY_PLACEHOLDER;
+  if (mode === "spotify") {
+    const s = state.spotify ?? {};
+    const label = !s.connected ? "NOT CONNECTED" : !s.title ? "NOTHING PLAYING" : s.playing ? "NOW PLAYING" : "PAUSED";
+    return { nowPlaying: { label, title: s.title || "", artist: s.artist || "" }, bg: "#111" };
+  }
   if (mode === "whiteboard") return { board: reported?.drawing_rev || state.desired?.modes?.whiteboard?.rev || 0, bg: "#fff" };
   if (mode === "aquarium") return { image: "aquarium/background.jpg", cover: true, fish: AQUARIUM_FISH, bg: "#2E8FC0" };
   if (mode === "magic8") {
@@ -311,6 +321,26 @@ function renderScreenList() {
         latest.className = "latest";
         card.append(latest);
       }
+      if (mode.id === "spotify") {
+        const now = document.createElement("p");
+        now.id = "spotify-now";
+        now.className = "latest";
+        const connect = document.createElement("button");
+        connect.className = "btn btn-primary";
+        connect.type = "button";
+        connect.id = "spotify-connect";
+        connect.style.marginTop = "12px";
+        connect.textContent = "Connect Spotify";
+        connect.addEventListener("click", connectSpotify);
+        const disconnect = document.createElement("button");
+        disconnect.className = "btn";
+        disconnect.type = "button";
+        disconnect.id = "spotify-disconnect";
+        disconnect.style.margin = "12px 0 0 8px";
+        disconnect.textContent = "Disconnect";
+        disconnect.addEventListener("click", disconnectSpotify);
+        card.append(now, connect, disconnect);
+      }
       const button = document.createElement("button");
       button.className = "btn";
       button.type = "button";
@@ -345,6 +375,40 @@ function renderModeCards() {
     latest.textContent = m8?.answer
       ? `Latest answer: “${m8.answer}”${m8.count ? ` (shake #${m8.count})` : ""}`
       : "No answer yet. Switch the clip to Magic 8 Ball and press its bottom button.";
+  }
+  const spotify = state.spotify;
+  const nowEl = $("#spotify-now");
+  if (nowEl) {
+    const connected = Boolean(spotify?.connected);
+    nowEl.textContent = !spotify?.configured && !connected
+      ? "Spotify isn't set up on the server yet (see docs/SPOTIFY.md)."
+      : !connected
+        ? (spotify?.error || "Not connected. Connect your Spotify account to show what you're playing.")
+        : spotify.title
+          ? `${spotify.playing ? "Now playing" : "Paused"}: “${spotify.title}” by ${spotify.artist || "unknown artist"}`
+          : "Connected. Nothing is playing right now.";
+    $("#spotify-connect").hidden = connected;
+    $("#spotify-connect").disabled = !spotify?.configured;
+    $("#spotify-disconnect").hidden = !connected;
+  }
+}
+
+async function connectSpotify() {
+  try {
+    const { url } = await api("/api/spotify/login", { method: "POST" });
+    location.href = url; // Spotify's own sign-in page; it sends you back here afterwards
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+async function disconnectSpotify() {
+  try {
+    await api("/api/spotify/disconnect", { method: "POST" });
+    toast("Spotify disconnected.");
+    await refresh();
+  } catch (error) {
+    handleError(error);
   }
 }
 
@@ -690,5 +754,13 @@ async function init() {
   renderScreenList();
   if (token) showApp();
   else showGate();
+
+  // Coming back from Spotify's sign-in page (?spotify=connected|denied|error).
+  const result = new URLSearchParams(location.search).get("spotify");
+  if (result) {
+    toast({ connected: "Spotify connected!", denied: "Spotify wasn't connected (cancelled)." }[result]
+      ?? "Couldn't connect Spotify. Try again.");
+    history.replaceState(null, "", location.pathname + location.hash);
+  }
 }
 init();

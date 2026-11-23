@@ -14,7 +14,7 @@ export const MODES = [
   { id: "magic8", name: "Magic 8 Ball", status: "ready", summary: "Press the clip's bottom button to shake it for an answer." },
   { id: "aquarium", name: "Aquarium", status: "ready", summary: "A clownfish, a blue tang and a betta swim around. Press the clip's bottom button to feed them." },
   { id: "whiteboard", name: "Whiteboard", status: "ready", summary: "Draw on your phone and send it to the clip." },
-  { id: "spotify", name: "Spotify Now Playing", status: "planned", summary: "Current song, artist and album art." },
+  { id: "spotify", name: "Spotify Now Playing", status: "ready", summary: "The song you're playing on Spotify, with its artist." },
 ];
 const MODE_IDS = new Set(MODES.map((mode) => mode.id));
 const MOOD_IDS = new Set(MOODS.map((mood) => mood.id));
@@ -46,6 +46,9 @@ const KEYS = {
   version: "moodclip:version",
   drawing: "moodclip:drawing",
   drawingRev: "moodclip:drawing_rev",
+  spotifyAuth: "moodclip:spotify_auth",   // { refresh_token, access_token, expires_at } - server only
+  spotifyState: "moodclip:spotify_state", // OAuth CSRF state { state, created_at }
+  spotifyNow: "moodclip:spotify_now",     // cached now-playing { fetched_at, result }
 };
 
 // ---------- Storage: Upstash Redis on Vercel, in-memory for the local test server ----------
@@ -172,7 +175,8 @@ function cleanReport(body) {
 // ---------- Endpoints ----------
 export const catalog = async () => json({ modes: MODES, moods: MOODS });
 
-export const getState = endpoint("CONTROL_TOKEN", async () => json(await readState()));
+export const getState = endpoint("CONTROL_TOKEN", async () =>
+  json({ ...(await readState()), spotify: await nowPlaying() }));
 
 export const postCommand = endpoint("CONTROL_TOKEN", async (request) => {
   const body = await readJson(request);
@@ -198,7 +202,10 @@ export const postDeviceSync = endpoint("DEVICE_TOKEN", async (request) => {
   const db = getStore();
   await db.set(KEYS.reported, { ...cleanReport(body), last_seen: new Date().toISOString() });
   const { desired } = await readState();
-  return json(deviceView(desired));
+  const view = deviceView(desired);
+  // Song info only while the clip shows the Spotify screen (no Spotify calls otherwise).
+  if (body.mode === "spotify") view.spotify = deviceSpotify(await nowPlaying());
+  return json(view);
 });
 
 // ---------- Whiteboard ----------
@@ -252,4 +259,172 @@ export const getDrawing = endpoint("CONTROL_TOKEN", async () => {
 export const getDeviceDrawing = endpoint("DEVICE_TOKEN", async () => {
   const drawing = await readDrawing();
   return drawing ? binary(drawing.bytes, drawing.rev) : error(404, "No drawing yet");
+});
+
+// ---------- Spotify Now Playing (display only) ----------
+// Authorization Code flow, scope user-read-currently-playing only. Tokens live in Redis and never
+// reach the website or the clip. Development Mode apps need the app owner to have Premium.
+// Environment variables: SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, optional SPOTIFY_REDIRECT_URI
+// (default: <this site>/api/spotify/callback - must match the Spotify dashboard exactly).
+const SPOTIFY_SCOPE = "user-read-currently-playing";
+const SPOTIFY_CACHE_MS = 10_000;          // ask Spotify at most every 10 s
+const SPOTIFY_STATE_MAX_AGE_MS = 10 * 60_000;
+
+function spotifyConfigured() {
+  return Boolean(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET);
+}
+
+function redirectUri(request) {
+  return process.env.SPOTIFY_REDIRECT_URI || `${new URL(request.url).origin}/api/spotify/callback`;
+}
+
+async function spotifyToken(params) {
+  const basic = Buffer.from(`${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`).toString("base64");
+  const response = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: { authorization: `Basic ${basic}`, "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(params),
+  });
+  const body = await response.json().catch(() => ({}));
+  return { ok: response.ok, status: response.status, body };
+}
+
+function saveTokens(body, previous = {}) {
+  return {
+    // Spotify may or may not send a new refresh token; keep the old one if not.
+    refresh_token: body.refresh_token ?? previous.refresh_token,
+    access_token: body.access_token,
+    expires_at: Date.now() + (body.expires_in ?? 3600) * 1000 - 60_000, // refresh a minute early
+  };
+}
+
+async function accessToken(db, auth) {
+  if (auth.access_token && Date.now() < auth.expires_at) return auth.access_token;
+  const result = await spotifyToken({ grant_type: "refresh_token", refresh_token: auth.refresh_token });
+  if (!result.ok) {
+    if (result.body?.error === "invalid_grant") {  // revoked or expired: needs reconnecting
+      await db.set(KEYS.spotifyAuth, null);
+      throw Object.assign(new Error("Spotify access was revoked. Connect again."), { revoked: true });
+    }
+    throw new Error(`Spotify token refresh failed (${result.status})`);
+  }
+  const next = saveTokens(result.body, auth);
+  await db.set(KEYS.spotifyAuth, next);
+  return next.access_token;
+}
+
+function trackFrom(data) {
+  const item = data?.item;
+  if (!item) return { playing: false, title: null, artist: null, image: null };
+  const artist = item.artists?.map((a) => a.name).join(", ") || item.show?.name || null;
+  return {
+    playing: Boolean(data.is_playing),
+    title: item.name ?? null,
+    artist,
+    image: item.album?.images?.at(-1)?.url ?? null, // smallest cover, for the website only
+  };
+}
+
+// What's playing now, from a 10 s cache. { configured, connected, playing, title, artist, image, error? }
+export async function nowPlaying() {
+  const configured = spotifyConfigured();
+  const db = getStore();
+  const auth = configured ? await db.get(KEYS.spotifyAuth) : null;
+  if (!auth?.refresh_token) return { configured, connected: false };
+
+  const cached = await db.get(KEYS.spotifyNow);
+  if (cached && Date.now() - cached.fetched_at < SPOTIFY_CACHE_MS) return cached.result;
+
+  const quiet = { configured, connected: true, playing: false, title: null, artist: null, image: null };
+  let result;
+  try {
+    const token = await accessToken(db, auth);
+    const response = await fetch("https://api.spotify.com/v1/me/player/currently-playing?additional_types=episode", {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (response.status === 204) {
+      result = quiet; // nothing playing
+    } else if (response.status === 401) {
+      await db.set(KEYS.spotifyAuth, { ...auth, expires_at: 0 }); // force a token refresh next time
+      result = cached?.result ?? quiet;
+    } else if (response.status === 429) {
+      result = cached?.result ?? quiet;
+      await db.set(KEYS.spotifyNow, { fetched_at: Date.now() + 20_000, result }); // back off ~30 s
+      return result;
+    } else if (!response.ok) {
+      result = { ...(cached?.result ?? quiet), error: `Spotify error ${response.status}` };
+    } else {
+      result = { configured, connected: true, ...trackFrom(await response.json()) };
+    }
+  } catch (err) {
+    if (err.revoked) {
+      await db.set(KEYS.spotifyNow, null);
+      return { configured, connected: false, error: err.message };
+    }
+    console.error(err);
+    result = { ...(cached?.result ?? quiet), error: "Couldn't reach Spotify" };
+  }
+  await db.set(KEYS.spotifyNow, { fetched_at: Date.now(), result });
+  return result;
+}
+
+// The clip gets plain text only: accents removed (e.g. "Beyonce") since its font is ASCII.
+function deviceSpotify(now) {
+  const plain = (text) => (text ? text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").slice(0, 80) : "");
+  if (!now.connected) return { state: "disconnected", title: "", artist: "" };
+  if (!now.title) return { state: "idle", title: "", artist: "" };
+  return { state: now.playing ? "playing" : "paused", title: plain(now.title), artist: plain(now.artist) };
+}
+
+// Website: start connecting. Returns Spotify's authorize URL (the browser then goes there).
+export const postSpotifyLogin = endpoint("CONTROL_TOKEN", async (request) => {
+  if (!spotifyConfigured()) return error(500, "SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET are not set in Vercel");
+  const state = crypto.randomUUID();
+  await getStore().set(KEYS.spotifyState, { state, created_at: Date.now() });
+  const url = new URL("https://accounts.spotify.com/authorize");
+  url.search = new URLSearchParams({
+    response_type: "code",
+    client_id: process.env.SPOTIFY_CLIENT_ID,
+    scope: SPOTIFY_SCOPE,
+    redirect_uri: redirectUri(request),
+    state,
+  }).toString();
+  return json({ url: url.toString() });
+});
+
+// Spotify redirects the browser here. Protected by the one-time state value instead of a token.
+export const getSpotifyCallback = async (request) => {
+  const back = (result) => Response.redirect(`${new URL(request.url).origin}/?spotify=${result}#screens`, 302);
+  try {
+    if (!spotifyConfigured() || !getStore()) return back("error");
+    const url = new URL(request.url);
+    const db = getStore();
+    const saved = await db.get(KEYS.spotifyState);
+    await db.set(KEYS.spotifyState, null); // one use only
+    const state = url.searchParams.get("state") ?? "";
+    if (!saved?.state || !sameToken(state, saved.state) || Date.now() - saved.created_at > SPOTIFY_STATE_MAX_AGE_MS) {
+      return back("error");
+    }
+    if (url.searchParams.get("error") || !url.searchParams.get("code")) return back("denied");
+    const result = await spotifyToken({
+      grant_type: "authorization_code",
+      code: url.searchParams.get("code"),
+      redirect_uri: redirectUri(request),
+    });
+    if (!result.ok || !result.body.refresh_token) return back("error");
+    await db.set(KEYS.spotifyAuth, saveTokens(result.body));
+    await db.set(KEYS.spotifyNow, null);
+    return back("connected");
+  } catch (err) {
+    console.error(err);
+    return back("error");
+  }
+};
+
+// Website: forget the Spotify connection (tokens deleted from Redis).
+export const postSpotifyDisconnect = endpoint("CONTROL_TOKEN", async () => {
+  const db = getStore();
+  await db.set(KEYS.spotifyAuth, null);
+  await db.set(KEYS.spotifyNow, null);
+  return json({ connected: false });
 });

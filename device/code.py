@@ -17,6 +17,7 @@ import microcontroller
 from billboard import Billboard
 from aquarium import AquariumScreen
 from magic8 import Magic8Screen
+from spotify import SpotifyScreen
 from whiteboard import WhiteboardScreen
 
 try:
@@ -83,22 +84,11 @@ class MoodScreen:
         self.view.tick()
 
 
-class SpotifyScreen:
-    id = "spotify"
-    name = "Spotify"
-
-    def show(self):
-        # Placeholder until the Spotify integration exists.
-        self.view = Billboard({"text": "Spotify not connected yet", "bg": 0x93BA9B, "sprite": "music"})
-
-    def tick(self):
-        self.view.tick()
-
-
 mood_screen = MoodScreen()
 magic8_screen = Magic8Screen()
 whiteboard_screen = WhiteboardScreen()
-SCREENS = (mood_screen, SpotifyScreen(), magic8_screen, AquariumScreen(), whiteboard_screen)  # new screens go at the end (NVM index)
+spotify_screen = SpotifyScreen()
+SCREENS = (mood_screen, spotify_screen, magic8_screen, AquariumScreen(), whiteboard_screen)  # new screens go at the end (NVM index)
 
 
 def show_screen(index):
@@ -158,7 +148,13 @@ def apply_drawing(rev, data):
     return True
 
 
-cloud = (CloudSync(wifi_link, current_status, apply_remote, apply_drawing)
+def on_reply(reply):
+    """Every check-in reply: pass Spotify song info (only sent while that screen shows)."""
+    if "spotify" in reply:
+        spotify_screen.update(reply["spotify"], SCREENS[current] is spotify_screen)
+
+
+cloud = (CloudSync(wifi_link, current_status, apply_remote, apply_drawing, on_reply)
          if wifi_link and wifi_link.ssid else None)
 
 frame_time = 1 / FPS
