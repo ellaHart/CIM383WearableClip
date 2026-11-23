@@ -184,7 +184,6 @@ class Preview {
 }
 
 const dashPreview = new Preview($("#dash-preview"));
-const createPreview = new Preview($("#create-preview"));
 
 // ---------- Helpers ----------
 const moodById = (id) => catalog.moods.find((mood) => mood.id === id);
@@ -463,15 +462,6 @@ $("#gate-form").addEventListener("submit", async (event) => {
 
 $("#forget-code").addEventListener("click", () => showGate());
 
-// ---------- Create (preview only) ----------
-function updateCreatePreview() {
-  const text = $("#create-text").value;
-  $("#create-count").textContent = `${text.length}/80`;
-  createPreview.set({ text: text || "Your message here", bg: $("#create-bg").value, sprite: null });
-}
-$("#create-text").addEventListener("input", updateCreatePreview);
-$("#create-bg").addEventListener("input", updateCreatePreview);
-
 // ---------- Colour toggle for previews ----------
 function applyColour(on) {
   document.body.classList.toggle("mono", !on);
@@ -675,7 +665,7 @@ function updateBoardStatus() {
 clearBoard();
 
 // ---------- Routing ----------
-const VIEWS = ["dashboard", "screens", "draw", "create", "settings"];
+const VIEWS = ["dashboard", "screens", "draw", "settings"];
 function route() {
   const view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "dashboard";
   document.querySelectorAll("[data-view]").forEach((el) => { el.hidden = el.id !== view; });
@@ -691,7 +681,6 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && po
 // ---------- Start ----------
 async function init() {
   applyColour(store.get(COLOUR_KEY) === "1");
-  updateCreatePreview();
   try {
     catalog = await api("/api/catalog");
   } catch (error) {
