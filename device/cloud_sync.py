@@ -154,11 +154,14 @@ def _host_from_url(url):
 
 
 class CloudSync:
-    def __init__(self, wifi_link, get_status, apply_command):
-        """get_status() -> {"mode": ..., "mood": ...}; apply_command(dict) -> True if applied."""
+    def __init__(self, wifi_link, get_status, apply_command, apply_drawing=None):
+        """get_status() -> {"mode": ..., "mood": ...}; apply_command(dict) -> True if applied;
+        apply_drawing(rev, data) -> True if a downloaded whiteboard drawing was accepted."""
         self.wifi_link = wifi_link
         self.get_status = get_status
         self.apply_command = apply_command
+        self.apply_drawing = apply_drawing
+        self.drawing_rev = 0  # whiteboard drawing we have (RAM only: re-downloaded after a restart)
         self.failures = 0
         self.next_sync = 0
         self.synced_once = False
@@ -236,6 +239,12 @@ class CloudSync:
             print("Cloud: connected; latest command v{}, clip has applied v{}".format(
                 command["version"], self.applied_version))
 
+        # A new whiteboard drawing? Download it (once per revision) before applying the command,
+        # so switching to the whiteboard shows the new drawing straight away.
+        drawing = command.get("drawing", 0)
+        if self.apply_drawing and drawing and drawing != self.drawing_rev:
+            self._fetch_drawing(drawing)
+
         version = command["version"]
         if version < self.applied_version:  # the server's state was reset
             self._save_version(version)
@@ -245,3 +254,13 @@ class CloudSync:
             print("Cloud: command v{} {}: {} {}".format(
                 version, "applied" if applied else "ignored", command.get("mode"), command.get("mood")))
             self.next_sync = 0  # report the new screen straight away
+
+    def _fetch_drawing(self, rev):
+        status, data = self.connection.request(
+            "GET", "/api/device/drawing", b"", {"Authorization": "Bearer " + self.token})
+        if status != 200:
+            print("Cloud: drawing {} not available (HTTP {})".format(rev, status))
+            return
+        if self.apply_drawing(rev, data):
+            self.drawing_rev = rev
+            self.next_sync = 0  # tell the website we have it
